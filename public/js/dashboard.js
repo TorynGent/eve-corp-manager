@@ -1,9 +1,10 @@
 async function loadDashboard() {
   try {
-    const [summary, snapshots, taxpayers] = await Promise.all([
+    const [summary, snapshots, taxpayers, kills] = await Promise.all([
       api.get('/api/summary'),
       api.get('/api/snapshots'),
       api.get('/api/wallet/taxpayers'),
+      api.get('/api/kills'),
     ]);
 
     // KPI tiles — wallet breakdown by division
@@ -31,8 +32,8 @@ async function loadDashboard() {
     // Top taxpayers
     renderTopTaxpayers(taxpayers.data, taxpayers.period);
 
-    // Revenue model (static visual)
-    document.getElementById('rev-model').innerHTML = revenueModelHTML();
+    // Top 5 corp killers
+    renderTopKillers(kills.top10?.slice(0, 5) || [], kills.period, kills.totalKills);
 
   } catch (err) {
     console.error('Dashboard load error:', err);
@@ -80,35 +81,26 @@ function renderTopTaxpayers(data, period) {
     </div>`).join('');
 }
 
-function revenueModelHTML() {
-  return `
-  <div style="display:flex;flex-wrap:wrap;gap:20px;font-size:0.8rem">
-    <div style="flex:1;min-width:220px">
-      <div style="color:var(--text-dim);margin-bottom:8px;font-size:0.7rem;text-transform:uppercase;letter-spacing:1px">Income Split</div>
-      ${revRow('30%', 'Corp Equity', '#4a9eff', 30)}
-      ${revRow('70%', 'General Income', '#00d4aa', 70)}
-    </div>
-    <div style="flex:1;min-width:220px">
-      <div style="color:var(--text-dim);margin-bottom:8px;font-size:0.7rem;text-transform:uppercase;letter-spacing:1px">Of General Income</div>
-      ${revRow('40%', 'Corp Equity top-up', '#4a9eff', 40)}
-      ${revRow('60%', 'Dividends', '#f0c040', 60)}
-    </div>
-    <div style="flex:1;min-width:220px">
-      <div style="color:var(--text-dim);margin-bottom:8px;font-size:0.7rem;text-transform:uppercase;letter-spacing:1px">Dividend Breakdown</div>
-      ${revRow('20%', 'Shareholders',   '#9b7fd4', 20)}
-      ${revRow('25%', 'Officers',       '#5ba4f5', 25)}
-      ${revRow(' 0%', 'Active Members', '#555', 0)}
-      ${revRow('50%', 'Fleet Bonus',    '#00d4aa', 50)}
-      ${revRow(' 5%', 'Top Tax Payer',  '#f0c040', 5)}
-    </div>
-  </div>`;
-}
-
-function revRow(pct, label, color, width) {
-  return `
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-    <span style="min-width:38px;text-align:right;font-weight:700;color:${color}">${pct}</span>
-    <div class="bar-outer" style="flex:1"><div class="bar-fill" style="width:${width}%;background:${color}"></div></div>
-    <span style="min-width:160px;color:var(--text)">${label}</span>
-  </div>`;
+function renderTopKillers(data, period, totalKills) {
+  document.getElementById('top-killers-period').textContent =
+    period ? `${period} · ${totalKills || 0} kills total` : '';
+  const el = document.getElementById('top-killers-list');
+  if (!data || data.length === 0) {
+    el.innerHTML = '<p class="empty">No kills recorded this month yet.</p>'; return;
+  }
+  const maxKills = data[0].kills;
+  const medals   = ['🥇','🥈','🥉','4.','5.'];
+  el.innerHTML = data.map((d, i) => `
+    <div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span>${medals[i] || (i+1)+'.'} <strong>${d.mainName}</strong></span>
+        <span style="display:flex;gap:14px;align-items:center">
+          <span style="color:var(--red);font-weight:700">⚔ ${d.kills}</span>
+          <span class="isk" style="color:var(--text-dim)">${fmtISK(d.totalValue)} ISK</span>
+        </span>
+      </div>
+      <div class="bar-outer">
+        <div class="bar-fill" style="width:${(d.kills/maxKills*100).toFixed(1)}%;background:var(--red)"></div>
+      </div>
+    </div>`).join('');
 }

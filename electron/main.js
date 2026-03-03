@@ -199,6 +199,13 @@ app.on('before-quit', () => {
   app.quitting = true;
 });
 
+// Force-exit the Node.js process once Electron has finished shutting down.
+// Without this, the Express HTTP server and node-cron jobs keep the event
+// loop alive and the terminal hangs even after the window is gone.
+app.on('will-quit', () => {
+  process.exit(0);
+});
+
 // macOS: re-create window when dock icon is clicked and no window is open
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
