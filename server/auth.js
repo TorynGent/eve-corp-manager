@@ -1,11 +1,11 @@
 'use strict';
-const axios                       = require('axios');
+const axios  = require('axios');
+const crypto = require('crypto');
 const { saveToken, getToken, updateAccessToken } = require('./db');
 
-const SSO_BASE    = 'https://login.eveonline.com';
-const TOKEN_URL   = `${SSO_BASE}/v2/oauth/token`;
-const AUTH_URL    = `${SSO_BASE}/v2/oauth/authorize`;
-const VERIFY_URL  = 'https://esi.evetech.net/verify/';
+const SSO_BASE  = 'https://login.eveonline.com';
+const TOKEN_URL = `${SSO_BASE}/v2/oauth/token`;
+const AUTH_URL  = `${SSO_BASE}/v2/oauth/authorize`;
 
 const SCOPES = [
   'esi-wallet.read_corporation_wallets.v1',
@@ -16,49 +16,87 @@ const SCOPES = [
   'esi-assets.read_corporation_assets.v1',
 ].join(' ');
 
-function basicAuth() {
-  const creds = `${process.env.EVE_CLIENT_ID}:${process.env.EVE_CLIENT_SECRET}`;
-  return 'Basic ' + Buffer.from(creds).toString('base64');
+// ─── PKCE helpers ────────────────────────────────────────────────────────────
+
+/** Generate a cryptographically random PKCE code_verifier (43 URL-safe chars) */
+function generateCodeVerifier() {
+  return crypto.randomBytes(32).toString('base64url');
 }
 
-/** Build the EVE SSO authorization URL */
+/** Derive code_challenge from verifier using S256 method */
+function generateCodeChallenge(verifier) {
+  return crypto.createHash('sha256').update(verifier).digest('base64url');
+}
+
+// ─── Auth URL ─────────────────────────────────────────────────────────────────
+
+/**
+ * Build the EVE SSO authorization URL.
+ * Returns { url, codeVerifier } — store codeVerifier in the session,
+ * it is required when exchanging the auth code for tokens.
+ */
 function buildAuthUrl(state) {
+  const codeVerifier  = generateCodeVerifier();
+  const codeChallenge = generateCodeChallenge(codeVerifier);
+
   const params = new URLSearchParams({
-    response_type: 'code',
-    client_id:     process.env.EVE_CLIENT_ID,
-    redirect_uri:  process.env.EVE_CALLBACK_URL,
-    scope:         SCOPES,
+    response_type:         'code',
+    client_id:             process.env.EVE_CLIENT_ID,
+    redirect_uri:          process.env.EVE_CALLBACK_URL,
+    scope:                 SCOPES,
     state,
+    code_challenge:        codeChallenge,
+    code_challenge_method: 'S256',
   });
-  return `${AUTH_URL}?${params}`;
+
+  return { url: `${AUTH_URL}?${params}`, codeVerifier };
 }
 
-/** Exchange auth code for tokens */
-async function exchangeCode(code) {
+// ─── Token exchange ───────────────────────────────────────────────────────────
+
+/**
+ * Exchange auth code for tokens using PKCE.
+ * No client_secret needed — the code_verifier proves ownership of the request.
+ */
+async function exchangeCode(code, codeVerifier) {
   const res = await axios.post(TOKEN_URL,
-    new URLSearchParams({ grant_type: 'authorization_code', code,
-                          redirect_uri: process.env.EVE_CALLBACK_URL }),
-    { headers: { Authorization: basicAuth(),
-                 'Content-Type': 'application/x-www-form-urlencoded' } }
+    new URLSearchParams({
+      grant_type:    'authorization_code',
+      client_id:     process.env.EVE_CLIENT_ID,
+      code,
+      code_verifier: codeVerifier,
+      redirect_uri:  process.env.EVE_CALLBACK_URL,
+    }),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
   );
   return res.data;
 }
 
-/** Refresh an expired access token */
+// ─── Token refresh ────────────────────────────────────────────────────────────
+
+/**
+ * Refresh an expired access token.
+ * PKCE refresh tokens only need client_id — no client_secret.
+ */
 async function refreshToken(characterId) {
   const row = getToken(characterId);
   if (!row) throw new Error(`No token found for character ${characterId}`);
 
   const res = await axios.post(TOKEN_URL,
-    new URLSearchParams({ grant_type: 'refresh_token', refresh_token: row.refresh_token }),
-    { headers: { Authorization: basicAuth(),
-                 'Content-Type': 'application/x-www-form-urlencoded' } }
+    new URLSearchParams({
+      grant_type:    'refresh_token',
+      refresh_token: row.refresh_token,
+      client_id:     process.env.EVE_CLIENT_ID,
+    }),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
   );
 
   const expiresAt = Math.floor(Date.now() / 1000) + res.data.expires_in - 60;
   updateAccessToken(characterId, res.data.access_token, expiresAt);
   return res.data.access_token;
 }
+
+// ─── Token helpers ────────────────────────────────────────────────────────────
 
 /** Get a valid (non-expired) access token, refreshing if needed */
 async function getValidToken(characterId) {
@@ -74,24 +112,27 @@ function decodeJwt(token) {
   return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
 }
 
-/** Verify token and extract character + corporation info */
+/** Verify token and extract character + corporation info, then persist to DB */
 async function verifyAndSave(tokenData) {
-  const jwt     = decodeJwt(tokenData.access_token);
+  const jwt      = decodeJwt(tokenData.access_token);
   // sub format: "CHARACTER:EVE:{character_id}"
-  const charId  = parseInt(jwt.sub.split(':')[2], 10);
+  const charId   = parseInt(jwt.sub.split(':')[2], 10);
   const charName = jwt.name;
   const expiresAt = Math.floor(Date.now() / 1000) + tokenData.expires_in - 60;
 
-  // Fetch corp info from ESI
   let corpId = null, corpName = null;
   try {
-    const res = await axios.get(`https://esi.evetech.net/latest/characters/${charId}/`,
-      { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
-    corpId   = res.data.corporation_id;
+    const res = await axios.get(
+      `https://esi.evetech.net/latest/characters/${charId}/`,
+      { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
+    );
+    corpId = res.data.corporation_id;
 
-    const corpRes = await axios.get(`https://esi.evetech.net/latest/corporations/${corpId}/`);
+    const corpRes = await axios.get(
+      `https://esi.evetech.net/latest/corporations/${corpId}/`
+    );
     corpName = corpRes.data.name;
-  } catch { /* non-critical */ }
+  } catch { /* non-critical — corp info will be null until next sync */ }
 
   saveToken({
     character_id:    charId,
@@ -106,6 +147,8 @@ async function verifyAndSave(tokenData) {
 
   return { charId, charName, corpId, corpName };
 }
+
+// ─── Middleware ───────────────────────────────────────────────────────────────
 
 /** Express middleware: require authenticated session */
 function requireAuth(req, res, next) {

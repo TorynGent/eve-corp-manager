@@ -8,8 +8,13 @@ const { getToken } = require('../db');
 // GET /auth/login — redirect to EVE SSO
 router.get('/login', (req, res) => {
   const state = crypto.randomBytes(16).toString('hex');
-  req.session.oauthState = state;
-  res.redirect(buildAuthUrl(state));
+  const { url, codeVerifier } = buildAuthUrl(state);
+
+  // Store both state (CSRF protection) and codeVerifier (PKCE) in session
+  req.session.oauthState    = state;
+  req.session.codeVerifier  = codeVerifier;
+
+  res.redirect(url);
 });
 
 // GET /auth/callback — EVE SSO redirects here after user approves
@@ -19,17 +24,26 @@ router.get('/callback', async (req, res) => {
   if (state !== req.session.oauthState) {
     return res.status(400).send('Invalid OAuth state. Please try logging in again.');
   }
+
+  const codeVerifier = req.session.codeVerifier;
+
+  // Clean up session — these are single-use
   delete req.session.oauthState;
+  delete req.session.codeVerifier;
+
+  if (!codeVerifier) {
+    return res.status(400).send('Missing PKCE verifier. Please try logging in again.');
+  }
 
   try {
-    const tokenData = await exchangeCode(code);
+    const tokenData = await exchangeCode(code, codeVerifier);
     const { charId, charName, corpId, corpName } = await verifyAndSave(tokenData);
 
     req.session.characterId   = charId;
     req.session.characterName = charName;
     req.session.corporationId = corpId;
 
-    // Kick off the scheduler + immediate sync for the new user
+    // Kick off immediate sync for the newly authenticated character
     const { updateSchedulerCharacter, runFullSync } = require('../scheduler');
     updateSchedulerCharacter(charId);
     runFullSync(charId).catch(e => console.error('Initial sync error:', e));
