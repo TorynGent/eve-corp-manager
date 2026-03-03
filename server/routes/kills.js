@@ -13,10 +13,24 @@ function nextMonthStart(period) {
 }
 
 // GET /api/kills — top killers + recent kills for a period
+// Default (no period or period=rolling30) → rolling last 30 days, consistent
+// with the wallet/taxpayer tab. Pass a YYYY-MM period for a specific month.
 router.get('/', requireAuth, (req, res) => {
-  const period    = req.query.period || currentPeriod();
-  const startDate = period + '-01T00:00:00Z';
-  const endDate   = nextMonthStart(period);
+  const reqPeriod = req.query.period;
+  const isRolling = !reqPeriod || reqPeriod === 'rolling30';
+
+  let startDate, endDate, periodLabel;
+  if (isRolling) {
+    const now  = new Date();
+    const past = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    startDate   = past.toISOString();
+    endDate     = now.toISOString();
+    periodLabel = 'Last 30 days';
+  } else {
+    startDate   = reqPeriod + '-01T00:00:00Z';
+    endDate     = nextMonthStart(reqPeriod);
+    periodLabel = reqPeriod;
+  }
 
   // Get our corp ID so we only count OUR members, not allied pilots on the kill
   const token  = getToken(req.session.characterId);
@@ -66,11 +80,14 @@ router.get('/', requireAuth, (req, res) => {
     totalValue: k.total_value,
   }));
 
-  const periods = db.prepare(
-    `SELECT DISTINCT substr(kill_time, 1, 7) AS p FROM corp_kills ORDER BY p DESC LIMIT 12`
-  ).all().map(r => r.p);
+  const periods = [
+    'rolling30',
+    ...db.prepare(
+      `SELECT DISTINCT substr(kill_time, 1, 7) AS p FROM corp_kills ORDER BY p DESC LIMIT 12`
+    ).all().map(r => r.p),
+  ];
 
-  res.json({ top10, recentKills: recent, totalKills: kills.length, period, periods });
+  res.json({ top10, recentKills: recent, totalKills: kills.length, period: reqPeriod || 'rolling30', periodLabel, periods });
 });
 
 // POST /api/kills/sync — manually trigger zKillboard sync

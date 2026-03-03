@@ -1,21 +1,21 @@
 // ── Corp Kills Tab ────────────────────────────────────────────────────────────
 async function loadKills() {
   const periodSel = document.getElementById('kills-period');
-  const period    = periodSel?.value || '';
+  const period    = periodSel?.value || 'rolling30';
 
   try {
-    const data = await api.get('/api/kills' + (period ? `?period=${period}` : ''));
+    const data = await api.get(`/api/kills?period=${period}`);
 
-    // Populate period selector
+    // Populate period selector — rolling30 always first, labelled "Last 30 days"
     if (periodSel && data.periods?.length) {
-      const current = periodSel.value;
+      const current = periodSel.value || 'rolling30';
       periodSel.innerHTML = data.periods.map(p =>
-        `<option value="${p}" ${p === (current || data.period) ? 'selected' : ''}>${p}</option>`
+        `<option value="${p}" ${p === current ? 'selected' : ''}>${p === 'rolling30' ? 'Last 30 days' : p}</option>`
       ).join('');
     }
 
-    document.getElementById('kills-total').textContent       = data.totalKills;
-    document.getElementById('kills-period-label').textContent = data.period;
+    document.getElementById('kills-total').textContent        = data.totalKills;
+    document.getElementById('kills-period-label').textContent = data.periodLabel || data.period;
 
     // Top 10 killers
     const top10El = document.getElementById('kills-top10');

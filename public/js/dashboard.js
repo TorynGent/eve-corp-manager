@@ -33,7 +33,7 @@ async function loadDashboard() {
     renderTopTaxpayers(taxpayers.data, taxpayers.period);
 
     // Top 5 corp killers
-    renderTopKillers(kills.top10?.slice(0, 5) || [], kills.period, kills.totalKills);
+    renderTopKillers(kills.top10?.slice(0, 5) || [], kills.periodLabel || kills.period, kills.totalKills);
 
   } catch (err) {
     console.error('Dashboard load error:', err);
