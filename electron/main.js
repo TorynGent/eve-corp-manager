@@ -128,10 +128,7 @@ function createWindow() {
     }
   });
 
-  // Dev tools in development
-  if (IS_DEV) {
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
-  }
+
 }
 
 function createTray() {
