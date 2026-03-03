@@ -55,9 +55,14 @@ router.get('/callback', async (req, res) => {
   }
 });
 
-// GET /auth/logout
+// GET /auth/logout — browser navigation (redirects back to login page)
 router.get('/logout', (req, res) => {
   req.session.destroy(() => res.redirect('/'));
+});
+
+// POST /auth/logout — programmatic logout (returns JSON, used by shutdown flow)
+router.post('/logout', (req, res) => {
+  req.session.destroy(() => res.json({ ok: true }));
 });
 
 // GET /auth/me — returns current session info (used by frontend to check login state)

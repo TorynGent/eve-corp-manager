@@ -55,7 +55,7 @@
       </span>
       <button class="btn btn-ghost btn-small" id="btn-sync-now">⟳ Sync Now</button>
       <button class="btn btn-ghost btn-small" id="btn-snapshot">📸 Snapshot</button>
-      <a href="/auth/logout" class="btn btn-danger btn-small">Logout</a>
+      <button class="btn btn-danger btn-small" id="btn-logout">Logout</button>
     </div>
   </header>
 
@@ -440,5 +440,23 @@
 <script src="/js/kills.js"></script>
 <script src="/js/settings.js"></script>
 <script src="/js/app.js"></script>
+
+<!-- ── Logout Choice Modal ────────────────────────────────────────────── -->
+<div id="logout-modal" style="display:none;position:fixed;inset:0;background:rgba(4,8,16,.85);
+  align-items:center;justify-content:center;z-index:9999">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:32px 36px;max-width:380px;width:90%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.6)">
+    <div style="font-size:1.15rem;font-weight:700;margin-bottom:10px">Log Out</div>
+    <div style="color:var(--text-dim);font-size:0.85rem;line-height:1.6;margin-bottom:24px">
+      <strong style="color:var(--text)">Log Off Only</strong> — keep the app running in the background.<br>
+      <strong style="color:var(--red)">Shut Down</strong> — close the app completely and stop all syncing.
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <button class="btn btn-primary" id="btn-logoff-only">Log Off Only</button>
+      <button class="btn btn-danger" id="btn-logoff-shutdown">Shut Down App</button>
+      <button class="btn btn-ghost" id="btn-logoff-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

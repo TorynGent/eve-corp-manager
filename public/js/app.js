@@ -85,6 +85,35 @@ function refreshTab(name) {
   }
 }
 
+// ── Logout Modal ──────────────────────────────────────────────────────────────
+document.getElementById('btn-logout').addEventListener('click', () => {
+  const modal = document.getElementById('logout-modal');
+  modal.style.display = 'flex';
+});
+
+document.getElementById('btn-logoff-cancel').addEventListener('click', () => {
+  document.getElementById('logout-modal').style.display = 'none';
+});
+
+// Close modal on backdrop click
+document.getElementById('logout-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget)
+    document.getElementById('logout-modal').style.display = 'none';
+});
+
+// Log Off Only — destroy session, stay on login screen, app keeps running
+document.getElementById('btn-logoff-only').addEventListener('click', () => {
+  document.getElementById('logout-modal').style.display = 'none';
+  window.location.href = '/auth/logout';
+});
+
+// Shut Down App — logout then close the Electron window (triggers app quit)
+document.getElementById('btn-logoff-shutdown').addEventListener('click', async () => {
+  document.getElementById('logout-modal').style.display = 'none';
+  try { await api.post('/auth/logout'); } catch { /* best-effort */ }
+  window.close(); // Electron: close event → window-all-closed → app.quit()
+});
+
 // ── Header Actions ────────────────────────────────────────────────────────────
 document.getElementById('btn-sync-now').addEventListener('click', async () => {
   const btn = document.getElementById('btn-sync-now');

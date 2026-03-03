@@ -120,13 +120,8 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  // Minimize to tray on close (don't quit)
-  mainWindow.on('close', event => {
-    if (!app.quitting) {
-      event.preventDefault();
-      mainWindow.hide();
-    }
-  });
+  // X button → quit the whole app (server + cron shut down via will-quit → process.exit)
+  // Tray remains available while the window is open; closing the window ends the session.
 
 
 }
@@ -189,10 +184,9 @@ app.on('second-instance', () => {
   }
 });
 
-// Don't quit when all windows are closed — the tray keeps the app alive
-app.on('window-all-closed', event => {
-  // On macOS apps conventionally stay in the Dock; on Windows/Linux we use the tray
-  // Either way, do not quit here — let the tray Quit menu item do it.
+// Quit when the last window is closed (X button, or window.close() from renderer)
+app.on('window-all-closed', () => {
+  app.quit();
 });
 
 app.on('before-quit', () => {
