@@ -11,7 +11,7 @@ async function loadMappings() {
       <tr>
         <td>${m.character_name}</td>
         <td><strong>${m.main_name}</strong></td>
-        <td><button class="btn btn-danger btn-small" onclick="deleteMapping(${m.character_id})">✕</button></td>
+        <td><button class="btn btn-ghost btn-small" onclick="armDelete(this, ${m.character_id})">✕</button></td>
       </tr>`).join('');
   } catch (err) {
     document.getElementById('mappings-tbody').innerHTML =
@@ -20,9 +20,30 @@ async function loadMappings() {
 }
 
 async function deleteMapping(id) {
-  if (!confirm('Remove this mapping?')) return;
   await api.del(`/api/settings/mappings/${id}`);
   loadMappings();
+}
+
+// Two-stage armed delete — avoids native confirm() which causes Electron focus loss
+let _deleteTimer = null;
+function armDelete(btn, id) {
+  if (btn.dataset.armed) {
+    clearTimeout(_deleteTimer);
+    _deleteTimer = null;
+    deleteMapping(id);
+    return;
+  }
+  btn.dataset.armed = '1';
+  btn.textContent = 'Sure?';
+  btn.classList.replace('btn-ghost', 'btn-danger');
+  _deleteTimer = setTimeout(() => {
+    if (btn.isConnected) {
+      btn.dataset.armed = '';
+      btn.textContent = '✕';
+      btn.classList.replace('btn-danger', 'btn-ghost');
+    }
+    _deleteTimer = null;
+  }, 3000);
 }
 
 document.getElementById('btn-add-mapping').addEventListener('click', async () => {
