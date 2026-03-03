@@ -39,7 +39,15 @@ app.get('*', (req, res) => {
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────
+
+// Resolves when the HTTP server is listening — Electron waits for this
+// before opening the BrowserWindow so the page is always ready on load.
+let _resolveReady;
+const ready = new Promise(resolve => { _resolveReady = resolve; });
+
 app.listen(PORT, () => {
+  _resolveReady(); // signal Electron (or any caller) that we are up
+
   console.log(`\n  ┌─────────────────────────────────────────────┐`);
   console.log(`  │  EVE Corp Dashboard running on port ${PORT}     │`);
   console.log(`  │  Open: http://localhost:${PORT}                │`);
@@ -57,5 +65,6 @@ app.listen(PORT, () => {
   }
 });
 
-// Export so routes can call updateSchedulerCharacter after new login
-module.exports = { updateSchedulerCharacter };
+// Export so routes can call updateSchedulerCharacter after new login,
+// and so Electron can await `ready` before opening the window.
+module.exports = { updateSchedulerCharacter, ready };
