@@ -11,8 +11,11 @@
 <!-- ═══════════════ LOGIN PAGE ════════════════════════════════ -->
 <div id="login-page">
   <div class="login-box">
-    <div class="login-logo">AE</div>
-    <h1>Abyssal Echoes Corp Manager</h1>
+    <div class="login-logo" id="login-logo">
+      <img id="login-logo-img" src="" alt="" style="display:none;width:80px;height:80px;border-radius:50%;object-fit:cover;" />
+      <span id="login-logo-text">EVE</span>
+    </div>
+    <h1 id="login-title">EVE Corp Manager</h1>
     <p>Log in with your CEO or Director character to access live corporation data. All data is stored locally — nothing leaves your machine.</p>
     <a class="btn-login" href="/auth/login">
       <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
@@ -40,7 +43,7 @@
 <div id="app">
 
   <header>
-    <div class="corp-logo" id="hdr-logo">—</div>
+    <div class="corp-logo" id="hdr-logo"><span id="hdr-logo-text">—</span></div>
     <div>
       <div class="corp-name" id="hdr-corp">Loading…</div>
       <div class="char-name" id="hdr-char"></div>

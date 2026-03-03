@@ -1,8 +1,15 @@
 'use strict';
 const Database = require('better-sqlite3');
 const path     = require('path');
+const fs       = require('fs');
 
-const DB_PATH = path.join(__dirname, '..', 'data', 'corp.db');
+// DB_PATH can be overridden by Electron (or any launcher) via environment variable
+// so the database lives in the user's data folder, not the install directory.
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'corp.db');
+
+// Ensure the directory exists (important for first run and Electron userData paths)
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+
 const db = new Database(DB_PATH);
 
 db.pragma('journal_mode = WAL');

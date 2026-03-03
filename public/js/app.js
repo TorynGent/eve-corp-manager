@@ -3,6 +3,11 @@
   try {
     const me = await api.get('/auth/me');
     if (!me.loggedIn) {
+      // Personalise the login page if we know the corp from a previous session
+      if (me.lastCorpName) {
+        document.getElementById('login-title').textContent = `${me.lastCorpName} — Corp Manager`;
+        setCorpLogo('login-logo-img', 'login-logo-text', me.lastCorpId, me.lastCorpName);
+      }
       document.getElementById('login-page').style.display = 'flex';
       return;
     }
@@ -12,12 +17,11 @@
     const appEl = document.getElementById('app');
     appEl.classList.add('visible');
 
-    // Header
-    const initials = (me.corporationName || 'CORP').substring(0, 2).toUpperCase();
-    document.getElementById('hdr-logo').textContent  = initials;
-    document.getElementById('hdr-corp').textContent  = me.corporationName || 'Your Corporation';
-    document.getElementById('hdr-char').textContent  = `Logged in as ${me.characterName}`;
+    // Header — use real EVE corp logo image, fall back to initials if it fails
+    document.getElementById('hdr-corp').textContent = me.corporationName || 'Your Corporation';
+    document.getElementById('hdr-char').textContent = `Logged in as ${me.characterName}`;
     document.title = `${me.corporationName || 'EVE'} Dashboard`;
+    setCorpLogo('hdr-logo', 'hdr-logo-text', me.corporationId, me.corporationName);
 
     // Load initial tab
     loadTabContent('overview');
@@ -129,4 +133,30 @@ function setSyncDot(color, label) {
   const dot = document.getElementById('sync-dot');
   dot.className = `dot dot-${color}`;
   document.getElementById('sync-label').textContent = label;
+}
+
+// ── Corp Logo ─────────────────────────────────────────────────────────────────
+// Sets a corporation logo using EVE's public image server.
+// imgId   = id of the <img> element to show
+// textId  = id of the fallback <span> showing initials
+// corpId  = EVE corporation ID
+// corpName = corporation name (used to generate initials fallback)
+function setCorpLogo(imgId, textId, corpId, corpName) {
+  const imgEl  = document.getElementById(imgId);
+  const textEl = document.getElementById(textId);
+  if (!imgEl || !corpId) return;
+
+  const initials = (corpName || 'CORP').substring(0, 2).toUpperCase();
+  if (textEl) textEl.textContent = initials;
+
+  imgEl.alt = initials;
+  imgEl.src = `https://images.evetech.net/corporations/${corpId}/logo?size=64`;
+  imgEl.style.display = 'block';
+  if (textEl) textEl.style.display = 'none';
+
+  imgEl.onerror = () => {
+    // Image failed (offline / unknown corp) — fall back to initials
+    imgEl.style.display = 'none';
+    if (textEl) textEl.style.display = '';
+  };
 }

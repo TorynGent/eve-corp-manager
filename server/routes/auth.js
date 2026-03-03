@@ -3,7 +3,7 @@ const express = require('express');
 const router  = express.Router();
 const crypto  = require('crypto');
 const { buildAuthUrl, exchangeCode, verifyAndSave } = require('../auth');
-const { getToken } = require('../db');
+const { getToken, db } = require('../db');
 
 // GET /auth/login — redirect to EVE SSO
 router.get('/login', (req, res) => {
@@ -62,7 +62,18 @@ router.get('/logout', (req, res) => {
 
 // GET /auth/me — returns current session info (used by frontend to check login state)
 router.get('/me', (req, res) => {
-  if (!req.session?.characterId) return res.json({ loggedIn: false });
+  if (!req.session?.characterId) {
+    // Not logged in — but return the last known corp so the login page
+    // can personalise itself for returning users (name + logo).
+    const last = db.prepare(
+      'SELECT corporation_id, corporation_name FROM tokens ORDER BY rowid DESC LIMIT 1'
+    ).get();
+    return res.json({
+      loggedIn:      false,
+      lastCorpId:    last?.corporation_id   || null,
+      lastCorpName:  last?.corporation_name || null,
+    });
+  }
 
   const token = getToken(req.session.characterId);
   res.json({

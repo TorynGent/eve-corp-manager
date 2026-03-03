@@ -65,8 +65,10 @@ header {
   border: 2px solid var(--blue);
   display: flex; align-items: center; justify-content: center;
   font-size: 13px; font-weight: 900; color: var(--blue); letter-spacing: -1px;
-  flex-shrink: 0;
+  flex-shrink: 0; overflow: hidden;
 }
+.corp-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.login-logo img { border-radius: 50%; object-fit: cover; }
 .corp-name { font-size: 1rem; font-weight: 700; color: var(--text-head); }
 .char-name { font-size: 0.72rem; color: var(--text-dim); }
 .header-sync {
