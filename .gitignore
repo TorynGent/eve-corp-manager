@@ -11,9 +11,6 @@ data/
 dist/
 out/
 
-# Generated placeholder icon (auto-created by predist hook)
-# Delete this line if you want to commit your custom hand-crafted icon
-build/icon.ico
 
 # Electron builder cache
 .electron-builder-cache/
