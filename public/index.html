@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EVE Corp Dashboard</title>
+  <link rel="stylesheet" href="/css/eve-theme.css" />
+</head>
+<body>
+
+<!-- ═══════════════ LOGIN PAGE ════════════════════════════════ -->
+<div id="login-page">
+  <div class="login-box">
+    <div class="login-logo">AE</div>
+    <h1>Abyssal Echoes Corp Manager</h1>
+    <p>Log in with your CEO or Director character to access live corporation data. All data is stored locally — nothing leaves your machine.</p>
+    <a class="btn-login" href="/auth/login">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+        <circle cx="10" cy="10" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <circle cx="10" cy="10" r="4"/>
+      </svg>
+      Login with EVE Online
+    </a>
+    <div class="login-scopes">
+      <strong style="color:#c5d5e8">Required ESI permissions (6 scopes):</strong>
+      <ul style="list-style:none;padding-left:0;margin-top:8px;line-height:1.9">
+        <li>✓ <code>esi-wallet.read_corporation_wallets.v1</code> — wallet &amp; tax data</li>
+        <li>✓ <code>esi-corporations.read_structures.v1</code> — structures &amp; fuel</li>
+        <li>✓ <code>esi-corporations.read_corporation_membership.v1</code> — member list</li>
+        <li>✓ <code>esi-corporations.track_members.v1</code> — last login tracking</li>
+        <li>✓ <code>esi-industry.read_corporation_mining.v1</code> — mining ledger &amp; Metenox observers</li>
+        <li>✓ <code>esi-assets.read_corporation_assets.v1</code> — gas &amp; fuel block inventory</li>
+      </ul>
+      <p style="font-size:0.72rem;color:var(--text-dim);margin-top:8px">Corp kills are fetched from zKillboard (public, no scope needed). Jita market prices are fetched anonymously from ESI.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ APP SHELL ═════════════════════════════════ -->
+<div id="app">
+
+  <header>
+    <div class="corp-logo" id="hdr-logo">—</div>
+    <div>
+      <div class="corp-name" id="hdr-corp">Loading…</div>
+      <div class="char-name" id="hdr-char"></div>
+    </div>
+    <div class="header-sync">
+      <span class="sync-status">
+        <span class="dot dot-grey" id="sync-dot"></span>
+        <span id="sync-label">Syncing…</span>
+      </span>
+      <button class="btn btn-ghost btn-small" id="btn-sync-now">⟳ Sync Now</button>
+      <button class="btn btn-ghost btn-small" id="btn-snapshot">📸 Snapshot</button>
+      <a href="/auth/logout" class="btn btn-danger btn-small">Logout</a>
+    </div>
+  </header>
+
+  <nav>
+    <div class="nav-tab active" data-tab="overview">Overview</div>
+    <div class="nav-tab" data-tab="structures">Structures</div>
+    <div class="nav-tab" data-tab="metenox">Metenox</div>
+    <div class="nav-tab" data-tab="wallet">Wallet &amp; Tax</div>
+    <div class="nav-tab" data-tab="mining">Mining</div>
+    <div class="nav-tab" data-tab="kills">Corp Kills</div>
+    <div class="nav-tab" data-tab="settings">Settings</div>
+  </nav>
+
+  <main>
+    <!-- ─── OVERVIEW ─────────────────────────────── -->
+    <div class="tab-panel active" id="tab-overview">
+      <div class="grid-4" id="kpi-tiles">
+        <div class="card kpi" style="min-height:auto"><div class="label">Corp Wallet</div><div id="kpi-wallet-breakdown" style="font-size:0.82rem;margin-top:6px">—</div></div>
+        <div class="card kpi"><div class="label">Corp Equity</div><div class="value" id="kpi-equity">—</div><div class="sub" id="kpi-equity-sub">from monthly snapshot</div></div>
+        <div class="card kpi"><div class="label">Active Members</div><div class="value" id="kpi-members">—</div><div class="sub" id="kpi-members-sub">of total</div></div>
+        <div class="card kpi"><div class="label">Metenox Count</div><div class="value" id="kpi-metenox">—</div><div class="sub" id="kpi-metenox-sub">structures online</div></div>
+      </div>
+
+      <div class="grid-2 mb-20">
+        <div class="card">
+          <div class="card-title">Wallet &amp; Equity — Last 6 Months</div>
+          <canvas id="chart-history"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-title">Top 5 Tax Payers — <span id="top-tax-period">this month</span></div>
+          <div id="top-taxpayers-list"></div>
+        </div>
+      </div>
+
+      <div class="card mb-20">
+        <div class="card-title">Revenue Distribution Model</div>
+        <div id="rev-model"><!-- rendered by dashboard.js --></div>
+      </div>
+    </div>
+
+    <!-- ─── STRUCTURES ───────────────────────────── -->
+    <div class="tab-panel" id="tab-structures">
+      <div id="struct-alerts"></div>
+
+      <!-- Gas & Fuel Stock Section -->
+      <div class="grid-2 mb-20" id="inventory-section">
+        <!-- Magmatic Gas -->
+        <div class="card">
+          <div class="card-title">💨 Magmatic Gas Stock
+            <span id="gas-stock-age" style="font-size:0.7rem;color:var(--text-dim);margin-left:10px;font-weight:400;text-transform:none;letter-spacing:0"></span>
+          </div>
+          <div id="gas-stock-content"><div class="loading"><span class="spinner"></span></div></div>
+        </div>
+        <!-- Fuel Blocks -->
+        <div class="card">
+          <div class="card-title">⛽ Fuel Block Stock
+            <span id="fuel-stock-age" style="font-size:0.7rem;color:var(--text-dim);margin-left:10px;font-weight:400;text-transform:none;letter-spacing:0"></span>
+          </div>
+          <div id="fuel-stock-content"><div class="loading"><span class="spinner"></span></div></div>
+        </div>
+      </div>
+
+      <div class="card mb-20">
+        <div class="card-title">Structure Fuel &amp; Gas Status</div>
+        <div class="table-wrap">
+          <table id="structures-table">
+            <thead>
+              <tr>
+                <th>Structure</th><th>Type</th><th>System</th>
+                <th class="text-right">Fuel Expires</th>
+                <th class="text-right">Fuel Days</th>
+                <th style="min-width:110px">Fuel Level</th>
+                <th class="text-right">Gas Days</th>
+                <th style="min-width:110px">Gas Level</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="structures-tbody"><tr><td colspan="9" class="loading"><span class="spinner"></span> Loading structures…</td></tr></tbody>
+            <tfoot id="structures-tfoot"></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── METENOX ──────────────────────────────── -->
+    <div class="tab-panel" id="tab-metenox">
+      <div class="card mb-20">
+        <div class="card-title">Metenox Moon Drill Profitability — Live Jita Prices
+          <span id="metenox-price-age" style="font-size:0.7rem;color:var(--text-dim);margin-left:12px;font-weight:400;text-transform:none;letter-spacing:0"></span>
+        </div>
+        <!-- Jita price factor toolbar -->
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap;padding:10px 12px;background:rgba(30,48,79,.35);border-radius:6px;border:1px solid var(--border)">
+          <span style="font-size:0.8rem;color:var(--text-dim);white-space:nowrap">💰 Jita Buy Factor:</span>
+          <input type="range" id="jita-factor-slider" min="10" max="100" value="100" step="5"
+                 style="width:180px;accent-color:var(--accent)">
+          <span id="jita-factor-val" style="font-size:1rem;font-weight:700;color:var(--isk);min-width:42px">100%</span>
+          <span style="font-size:0.75rem;color:var(--text-dim)">— drag left to model selling below Jita buy (e.g. 90% = 10% below)</span>
+        </div>
+        <div class="table-wrap">
+          <table id="metenox-table">
+            <thead>
+              <tr>
+                <th class="sortable" data-sort="name">Structure ↕</th>
+                <th class="sortable" data-sort="systemName">System ↕</th>
+                <th class="text-right">Fuel Days</th>
+                <th class="text-right sortable" data-sort="monthlyRevenue">Revenue/mo ↕</th>
+                <th class="text-right">Fuel Cost/mo</th>
+                <th class="text-right sortable" data-sort="monthlyProfit">Profit/mo ↕</th>
+                <th class="text-center">Status</th>
+                <th class="text-center">Materials</th>
+              </tr>
+            </thead>
+            <tbody id="metenox-tbody"><tr><td colspan="8" class="loading"><span class="spinner"></span></td></tr></tbody>
+            <tfoot id="metenox-tfoot"></tfoot>
+          </table>
+        </div>
+      </div>
+      <div class="card mb-20">
+        <div class="card-title">Profit per Moon</div>
+        <canvas id="chart-metenox"></canvas>
+      </div>
+    </div>
+
+    <!-- ─── WALLET & TAX ─────────────────────────── -->
+    <div class="tab-panel" id="tab-wallet">
+      <div class="grid-2 mb-20">
+        <div class="card">
+          <div class="card-title">Tax Contributions by Group
+            <select id="wallet-period-select" style="margin-left:10px;width:auto;padding:3px 6px;font-size:0.72rem;display:inline-block">
+              <option value="">Last 30 days</option>
+            </select>
+          </div>
+          <canvas id="chart-tax-donut"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-title">Wallet Balance — Last 30 Days</div>
+          <canvas id="chart-wallet-balance"></canvas>
+        </div>
+      </div>
+
+      <div class="card mb-20">
+        <div class="card-title">Top 5 Tax Contributors</div>
+        <div id="top5-tax"></div>
+      </div>
+
+      <div class="card mb-20">
+        <div class="card-title">Wallet Journal
+          <input type="text" id="journal-filter" placeholder="Filter by type…" style="margin-left:12px;width:160px;display:inline-block;padding:4px 8px;font-size:0.72rem">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Date</th><th>Div</th><th>Type</th><th>From / To</th>
+              <th class="text-right">Amount</th><th class="text-right">Balance</th>
+            </tr></thead>
+            <tbody id="journal-tbody"><tr><td colspan="6" class="loading"><span class="spinner"></span></td></tr></tbody>
+          </table>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
+          <button class="btn btn-ghost btn-small" id="journal-prev">← Prev</button>
+          <span id="journal-page-info" style="font-size:0.75rem;color:var(--text-dim)"></span>
+          <button class="btn btn-ghost btn-small" id="journal-next">Next →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── MINING ──────────────────────────────── -->
+    <div class="tab-panel" id="tab-mining">
+      <div class="card mb-20">
+        <div class="card-title">Corp Mining Ledger
+          <select id="mining-period" style="margin-left:10px;width:auto;padding:3px 6px;font-size:0.72rem;display:inline-block"></select>
+          <span id="mining-period-label" style="margin-left:10px;font-size:0.72rem;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400"></span>
+          <span id="mining-miner-count" style="margin-left:auto;font-size:0.72rem;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Main (click to expand)</th>
+              <th class="text-right">Total Ore</th>
+              <th class="text-right">Est. Value (Jita Buy)</th>
+              <th style="min-width:120px">Share</th>
+              <th class="text-right">%</th>
+            </tr></thead>
+            <tbody id="mining-tbody"><tr><td colspan="5" class="loading"><span class="spinner"></span> Loading mining data…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card mb-20">
+        <div class="card-title">Top 10 Miners by Value</div>
+        <canvas id="chart-mining"></canvas>
+      </div>
+    </div>
+
+    <!-- ─── CORP KILLS ────────────────────────── -->
+    <div class="tab-panel" id="tab-kills">
+      <div class="grid-2 mb-20">
+        <div class="card">
+          <div class="card-title">Top 10 Killers
+            <select id="kills-period" style="margin-left:10px;width:auto;padding:3px 6px;font-size:0.72rem;display:inline-block"></select>
+            <span id="kills-period-label" style="margin-left:8px;font-size:0.72rem;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400"></span>
+          </div>
+          <div id="kills-top10"><div class="loading"><span class="spinner"></span></div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Kills Chart</div>
+          <canvas id="chart-kills"></canvas>
+        </div>
+      </div>
+      <div class="card mb-20">
+        <div class="card-title">Recent Kills
+          <span id="kills-total" style="margin-left:8px;font-size:0.72rem;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400"></span> total
+          <button class="btn btn-ghost btn-small" id="btn-sync-kills" style="margin-left:auto">⟳ Sync Kills</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Date</th><th>Victim Ship</th><th>System</th>
+              <th class="text-right">Value</th><th></th>
+            </tr></thead>
+            <tbody id="kills-tbody"><tr><td colspan="5" class="loading"><span class="spinner"></span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inventory tab removed — gas/fuel stock now shown in Structures tab -->
+
+    <!-- ─── SETTINGS ─────────────────────────────── -->
+    <div class="tab-panel" id="tab-settings">
+      <div class="grid-2 mb-20">
+        <!-- Alt → Main Mappings -->
+        <div class="card">
+          <div class="card-title">Alt → Main Mappings</div>
+          <div class="form-row" style="margin-bottom:14px">
+            <div class="form-group"><label>Alt Character Name</label><input type="text" id="map-alt" placeholder="e.g. Flak Chirac"></div>
+            <div class="form-group"><label>Main Group Name</label><input type="text" id="map-main" placeholder="e.g. Cray"></div>
+            <div style="padding-top:20px"><button class="btn btn-primary btn-small" id="btn-add-mapping">Add</button></div>
+          </div>
+          <!-- CSV Import -->
+          <div style="margin-bottom:14px;padding:10px;background:rgba(74,158,255,.07);border-radius:6px;border:1px solid rgba(74,158,255,.2)">
+            <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px">
+              Import from CSV — one line per mapping: <code style="color:#4a9eff">AltName,MainName</code>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn btn-ghost btn-small" id="btn-csv-upload">📂 Import CSV</button>
+              <input type="file" id="csv-file-input" accept=".csv,.txt" style="display:none">
+              <span style="font-size:0.72rem;color:var(--text-dim)">or run <code style="color:#4a9eff">python scripts\import_alts.py</code> to import from Excel</span>
+            </div>
+            <div id="csv-feedback" style="margin-top:8px"></div>
+          </div>
+          <div class="table-wrap">
+            <table><thead><tr><th>Alt</th><th>→ Main</th><th></th></tr></thead>
+            <tbody id="mappings-tbody"><tr><td colspan="3" class="loading"><span class="spinner"></span></td></tr></tbody></table>
+          </div>
+        </div>
+
+        <!-- Sync Status -->
+        <div class="card">
+          <div class="card-title">Sync Status</div>
+          <div id="sync-status-list"></div>
+          <div style="margin-top:14px;display:flex;gap:10px">
+            <button class="btn btn-primary btn-small" id="btn-full-sync">⟳ Full Sync Now</button>
+            <button class="btn btn-ghost btn-small" id="btn-manual-snapshot">📸 Create Snapshot</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notifications -->
+      <div class="card mb-20">
+        <div class="card-title">Email Notifications</div>
+        <div class="grid-2" style="gap:20px">
+          <div>
+            <div class="form-group" style="margin-bottom:10px"><label>SMTP Host</label><input type="text" id="smtp-host" placeholder="smtp.gmail.com"></div>
+            <div class="form-row">
+              <div class="form-group"><label>Port</label><input type="number" id="smtp-port" value="587" style="max-width:80px"></div>
+              <div class="form-group"><label>Username</label><input type="email" id="smtp-user" placeholder="you@gmail.com"></div>
+            </div>
+            <div class="form-group" style="margin-top:10px"><label>Password / App Password</label><input type="password" id="smtp-pass" placeholder="(unchanged)"></div>
+            <div class="form-group" style="margin-top:10px"><label>From Address</label><input type="text" id="smtp-from" placeholder="EVE Corp Dashboard <no-reply@example.com>"></div>
+            <div class="form-group" style="margin-top:10px"><label>Recipients (comma-separated)</label><input type="text" id="smtp-recipients" placeholder="you@example.com, fleetcommander@example.com"></div>
+          </div>
+          <div>
+            <div style="margin-bottom:16px">
+              <label>Fuel Block Alert Threshold</label>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+                <input type="range" id="fuel-threshold" min="1" max="60" value="14" style="flex:1">
+                <span class="range-val" id="fuel-threshold-val">14 days</span>
+              </div>
+            </div>
+            <div style="margin-bottom:16px">
+              <label>Magmatic Gas Alert Threshold</label>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+                <input type="range" id="gas-threshold" min="1" max="30" value="7" style="flex:1">
+                <span class="range-val" id="gas-threshold-val">7 days</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:20px">
+              <button class="btn btn-primary btn-small" id="btn-save-notif">Save</button>
+              <button class="btn btn-ghost btn-small" id="btn-test-email">Send Test Email</button>
+            </div>
+            <div id="notif-feedback" style="margin-top:10px"></div>
+          </div>
+        </div>
+
+        <div style="margin-top:20px">
+          <div class="card-title" style="margin-bottom:10px">Recent Alerts Sent</div>
+          <div id="notif-log"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>EVE Corp Dashboard · ESI-powered · Data updates hourly</footer>
+</div>
+
+<!-- Metenox Manual Materials Modal -->
+<div id="metenox-manual-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;align-items:center;justify-content:center">
+  <div class="card" style="width:min(680px,96vw);max-height:88vh;overflow-y:auto;position:relative">
+    <div class="card-title" style="margin-bottom:4px">
+      ✏ Manual Moon Materials — <span id="modal-structure-name" style="color:var(--accent)"></span>
+    </div>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:14px;line-height:1.5">
+      Enter estimated output <strong style="color:var(--text)">per hour</strong> per material (e.g. 500 Cobalt/hr).
+      Used when no ESI mining observer data is available — once observer data syncs it takes priority automatically.
+    </p>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:6px 8px;font-size:0.75rem;color:var(--text-dim)">Material</th>
+          <th style="text-align:right;padding:6px 8px;font-size:0.75rem;color:var(--text-dim)">Qty / Hour</th>
+          <th style="text-align:right;padding:6px 8px;font-size:0.75rem;color:var(--text-dim)">Est. Jita/mo</th>
+          <th style="width:36px"></th>
+        </tr>
+      </thead>
+      <tbody id="manual-materials-tbody">
+        <tr><td colspan="4" class="dim" style="padding:12px;text-align:center;font-size:0.8rem">Loading…</td></tr>
+      </tbody>
+    </table>
+    <div style="padding:12px;background:rgba(30,48,79,.4);border-radius:6px;border:1px solid var(--border)">
+      <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;font-weight:600">Add material:</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="manual-type-select"
+                style="flex:2;min-width:190px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:6px 8px;font-size:0.85rem">
+          <option value="">— select material —</option>
+        </select>
+        <input type="number" id="manual-qty-day" placeholder="Qty / hour" min="0" step="1"
+               style="flex:1;min-width:110px;max-width:150px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:6px 8px;font-size:0.85rem">
+        <button type="button" class="btn btn-primary btn-small" onclick="addManualMaterialRow()">+ Add Row</button>
+      </div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeManualModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Gas Edit Modal -->
+<div id="gas-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center">
+  <div class="card" style="width:380px;max-width:95vw">
+    <div class="card-title">Update Magmatic Gas — <span id="gas-modal-name"></span></div>
+    <input type="hidden" id="gas-modal-id">
+    <div class="form-group" style="margin-bottom:10px"><label>Last Refill Date</label><input type="date" id="gas-refill-date"></div>
+    <div class="form-group" style="margin-bottom:10px"><label>Quantity Refilled (units)</label><input type="number" id="gas-qty" placeholder="e.g. 155000"></div>
+    <div class="form-group" style="margin-bottom:10px"><label>Daily Consumption (units/day)</label><input type="number" id="gas-daily" value="4800"></div>
+    <div class="form-group" style="margin-bottom:16px"><label>Notes</label><input type="text" id="gas-notes" placeholder="optional"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" id="gas-modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="gas-modal-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/charts.js"></script>
+<script src="/js/dashboard.js"></script>
+<script src="/js/structures.js"></script>
+<script src="/js/metenox.js"></script>
+<script src="/js/wallet.js"></script>
+<script src="/js/inventory.js"></script>
+<script src="/js/mining.js"></script>
+<script src="/js/kills.js"></script>
+<script src="/js/settings.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
