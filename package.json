@@ -8,6 +8,8 @@
     "dev": "node --watch server/index.js",
     "electron": "electron .",
     "rebuild": "electron-builder install-app-deps",
+    "make-icon": "node scripts/make-icon.js",
+    "predist": "node scripts/make-icon.js",
     "dist": "electron-builder --win"
   },
   "dependencies": {
@@ -29,6 +31,9 @@
     "productName": "EVE Corp Manager",
     "copyright": "Copyright © 2026 Cray Rayner / Toryn Gent",
     "asar": true,
+    "asarUnpack": [
+      "**/*.node"
+    ],
     "directories": {
       "output": "dist"
     },
@@ -36,7 +41,6 @@
       "electron/**/*",
       "server/**/*",
       "public/**/*",
-      "scripts/**/*",
       "package.json"
     ],
     "extraResources": [
@@ -46,6 +50,7 @@
       }
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -62,7 +67,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "EVE Corp Manager",
-      "uninstallDisplayName": "EVE Corp Manager"
+      "uninstallDisplayName": "EVE Corp Manager",
+      "runAfterFinish": true
     }
   }
 }
