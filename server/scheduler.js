@@ -137,6 +137,7 @@ async function rebuildTaxSummary(characterId) {
     'ess_escrow_transfer',  // ESS reserve bank payouts
     'agent_mission_reward', // mission runner tax
     'industry_job_tax',     // manufacturing / research job tax
+    'daily_goal_payouts',   // AIR Daily Goals (500k ISK reward × corp tax rate)
   ];
   const period = new Date().toISOString().slice(0, 7);
 
