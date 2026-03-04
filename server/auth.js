@@ -7,14 +7,16 @@ const SSO_BASE  = 'https://login.eveonline.com';
 const TOKEN_URL = `${SSO_BASE}/v2/oauth/token`;
 const AUTH_URL  = `${SSO_BASE}/v2/oauth/authorize`;
 
-const SCOPES = [
+const REQUIRED_SCOPES = [
   'esi-wallet.read_corporation_wallets.v1',
   'esi-corporations.read_structures.v1',
   'esi-corporations.read_corporation_membership.v1',
   'esi-corporations.track_members.v1',
   'esi-industry.read_corporation_mining.v1',
   'esi-assets.read_corporation_assets.v1',
-].join(' ');
+];
+
+const SCOPES = REQUIRED_SCOPES.join(' ');
 
 // ─── PKCE helpers ────────────────────────────────────────────────────────────
 
@@ -145,7 +147,8 @@ async function verifyAndSave(tokenData) {
     scopes:          jwt.scp ? (Array.isArray(jwt.scp) ? jwt.scp.join(' ') : jwt.scp) : '',
   });
 
-  return { charId, charName, corpId, corpName };
+  const grantedScopes = jwt.scp ? (Array.isArray(jwt.scp) ? jwt.scp : [jwt.scp]) : [];
+  return { charId, charName, corpId, corpName, grantedScopes };
 }
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -156,4 +159,4 @@ function requireAuth(req, res, next) {
   res.status(401).json({ error: 'Not authenticated' });
 }
 
-module.exports = { buildAuthUrl, exchangeCode, verifyAndSave, getValidToken, requireAuth };
+module.exports = { buildAuthUrl, exchangeCode, verifyAndSave, getValidToken, requireAuth, REQUIRED_SCOPES };

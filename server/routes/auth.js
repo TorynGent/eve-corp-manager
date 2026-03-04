@@ -2,7 +2,7 @@
 const express = require('express');
 const router  = express.Router();
 const crypto  = require('crypto');
-const { buildAuthUrl, exchangeCode, verifyAndSave } = require('../auth');
+const { buildAuthUrl, exchangeCode, verifyAndSave, REQUIRED_SCOPES } = require('../auth');
 const { getToken, db } = require('../db');
 
 // GET /auth/login — redirect to EVE SSO
@@ -37,7 +37,14 @@ router.get('/callback', async (req, res) => {
 
   try {
     const tokenData = await exchangeCode(code, codeVerifier);
-    const { charId, charName, corpId, corpName } = await verifyAndSave(tokenData);
+    const { charId, charName, corpId, corpName, grantedScopes } = await verifyAndSave(tokenData);
+
+    // Check all required scopes were granted
+    const missingScopes = REQUIRED_SCOPES.filter(s => !grantedScopes.includes(s));
+    if (missingScopes.length > 0) {
+      console.warn(`[Auth] ${charName} logged in but missing scopes:`, missingScopes);
+      return res.redirect(`/?auth_error=missing_scopes&missing=${encodeURIComponent(missingScopes.join(','))}&char=${encodeURIComponent(charName)}`);
+    }
 
     req.session.characterId   = charId;
     req.session.characterName = charName;
@@ -51,7 +58,7 @@ router.get('/callback', async (req, res) => {
     res.redirect('/');
   } catch (err) {
     console.error('Auth callback error:', err.message);
-    res.status(500).send(`Authentication failed: ${err.message}`);
+    res.redirect(`/?auth_error=failed&message=${encodeURIComponent(err.message)}`);
   }
 });
 

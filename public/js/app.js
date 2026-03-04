@@ -8,6 +8,29 @@
         document.getElementById('login-title').textContent = `${me.lastCorpName} — Corp Manager`;
         setCorpLogo('login-logo-img', 'login-logo-text', me.lastCorpId, me.lastCorpName);
       }
+
+      // Show auth error if redirected back from a failed login
+      const params = new URLSearchParams(window.location.search);
+      const authError = params.get('auth_error');
+      if (authError) {
+        const errBox    = document.getElementById('login-error');
+        const errMsg    = document.getElementById('login-error-msg');
+        const errDetail = document.getElementById('login-error-detail');
+        if (authError === 'missing_scopes') {
+          const char    = params.get('char') || 'That character';
+          const missing = (params.get('missing') || '').split(',').filter(Boolean);
+          errMsg.textContent = `${char} is missing required ESI permissions.`;
+          errDetail.innerHTML = `Please log in with a CEO or Director character and approve all scopes.<br>
+            Missing: <code style="color:#ffb347">${missing.join('</code>, <code style="color:#ffb347">')}</code>`;
+        } else {
+          errMsg.textContent = 'Authentication failed.';
+          errDetail.textContent = params.get('message') || 'Please try again.';
+        }
+        errBox.style.display = 'block';
+        // Clean the URL so refreshing doesn't re-show the error
+        window.history.replaceState({}, '', '/');
+      }
+
       document.getElementById('login-page').style.display = 'flex';
       return;
     }
