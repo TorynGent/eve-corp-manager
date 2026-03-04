@@ -133,9 +133,10 @@ async function syncWallet(characterId, corpId) {
 
 async function rebuildTaxSummary(characterId) {
   const TAX_TYPES = [
-    'bounty_prizes','ess_escrow_transfer','agent_mission_reward',
-    'transaction_tax','industry_job_tax','market_transaction',
-    'contract_price_payment_corp','bounty_prize',
+    'bounty_prizes',        // NPC bounty tax + ESS regular payouts
+    'ess_escrow_transfer',  // ESS reserve bank payouts
+    'agent_mission_reward', // mission runner tax
+    'industry_job_tax',     // manufacturing / research job tax
   ];
   const period = new Date().toISOString().slice(0, 7);
 

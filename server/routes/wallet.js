@@ -4,11 +4,16 @@ const router  = express.Router();
 const { requireAuth } = require('../auth');
 const { db }          = require('../db');
 
-// Ref types we count as "tax-generating" income
+// Ref types we count as "tax-generating" income from members.
+// Deliberately excludes: transaction_tax (corp's own broker fees — expense),
+// market_transaction (corp's own market activity), contract_price_payment_corp
+// (corp-level income, not member tax), bounty_prize (singular — player bounty
+// claims, not NPC ratting tax).
 const TAX_REF_TYPES = [
-  'bounty_prizes', 'ess_escrow_transfer', 'agent_mission_reward',
-  'transaction_tax', 'industry_job_tax', 'market_transaction',
-  'contract_price_payment_corp', 'bounty_prize',
+  'bounty_prizes',        // NPC bounty tax + ESS regular payouts
+  'ess_escrow_transfer',  // ESS reserve bank payouts
+  'agent_mission_reward', // mission runner tax
+  'industry_job_tax',     // manufacturing / research job tax
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
