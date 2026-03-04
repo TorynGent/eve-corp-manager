@@ -2,7 +2,7 @@
 const express = require('express');
 const router  = express.Router();
 const { requireAuth } = require('../auth');
-const { db }          = require('../db');
+const { db, getSetting } = require('../db');
 
 // Ref types we count as "tax-generating" income from members.
 // Deliberately excludes: transaction_tax (corp's own broker fees — expense),
