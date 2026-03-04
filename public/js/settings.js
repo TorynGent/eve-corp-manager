@@ -206,8 +206,9 @@ document.getElementById('csv-file-input')?.addEventListener('change', async (e) 
 
 // ── Member Health Weights ─────────────────────────────────────────────────────
 function updateHealthWeightSum() {
-  const sum = ['hw-tax','hw-mining','hw-kills','hw-activity'].reduce((s, id) => {
-    return s + parseInt(document.getElementById(id).value, 10);
+  const sum = ['hw-tax','hw-mining','hw-kills','hw-activity','hw-fatpap'].reduce((s, id) => {
+    const el = document.getElementById(id);
+    return s + (el ? parseInt(el.value, 10) || 0 : 0);
   }, 0);
   const lbl = document.getElementById('health-weight-sum-label');
   if (!lbl) return;
@@ -215,7 +216,7 @@ function updateHealthWeightSum() {
   lbl.style.color = sum === 100 ? 'var(--green)' : 'var(--orange)';
 }
 
-['hw-tax','hw-mining','hw-kills','hw-activity'].forEach(id => {
+['hw-tax','hw-mining','hw-kills','hw-activity','hw-fatpap'].forEach(id => {
   document.getElementById(id)?.addEventListener('input', e => {
     document.getElementById(id + '-val').textContent = e.target.value + '%';
     updateHealthWeightSum();
@@ -228,24 +229,29 @@ document.getElementById('hw-inactive')?.addEventListener('input', e => {
 async function loadHealthWeights() {
   try {
     const cfg = await api.get('/api/health/weights');
-    document.getElementById('hw-tax').value         = cfg.weightTax;
-    document.getElementById('hw-mining').value      = cfg.weightMining;
-    document.getElementById('hw-kills').value       = cfg.weightKills;
-    document.getElementById('hw-activity').value    = cfg.weightActivity;
-    document.getElementById('hw-inactive').value    = cfg.inactiveDays;
+    document.getElementById('hw-tax').value               = cfg.weightTax;
+    document.getElementById('hw-mining').value            = cfg.weightMining;
+    document.getElementById('hw-kills').value             = cfg.weightKills;
+    document.getElementById('hw-activity').value          = cfg.weightActivity;
+    document.getElementById('hw-fatpap').value            = cfg.weightFatPap;
+    document.getElementById('hw-inactive').value          = cfg.inactiveDays;
+    document.getElementById('hw-threshold-hardcore').value = cfg.thresholdHardcore;
+    document.getElementById('hw-threshold-active').value   = cfg.thresholdActive;
+    document.getElementById('hw-threshold-atrisk').value   = cfg.thresholdAtRisk;
     document.getElementById('hw-tax-val').textContent      = cfg.weightTax      + '%';
     document.getElementById('hw-mining-val').textContent   = cfg.weightMining   + '%';
     document.getElementById('hw-kills-val').textContent    = cfg.weightKills    + '%';
     document.getElementById('hw-activity-val').textContent = cfg.weightActivity + '%';
-    document.getElementById('hw-inactive-val').textContent = cfg.inactiveDays   + ' days';
+    document.getElementById('hw-fatpap-val').textContent   = cfg.weightFatPap  + '%';
+    document.getElementById('hw-inactive-val').textContent = cfg.inactiveDays  + ' days';
     updateHealthWeightSum();
   } catch (err) { console.error('Health weights load error:', err); }
 }
 
 document.getElementById('btn-save-health-weights')?.addEventListener('click', async () => {
   const fb  = document.getElementById('health-weights-feedback');
-  const sum = ['hw-tax','hw-mining','hw-kills','hw-activity'].reduce((s, id) => {
-    return s + parseInt(document.getElementById(id).value, 10);
+  const sum = ['hw-tax','hw-mining','hw-kills','hw-activity','hw-fatpap'].reduce((s, id) => {
+    return s + parseInt(document.getElementById(id).value, 10) || 0;
   }, 0);
   if (sum !== 100) {
     fb.innerHTML = `<div class="alert alert-warn">Weights must sum to 100 (currently ${sum}).</div>`;
@@ -254,11 +260,15 @@ document.getElementById('btn-save-health-weights')?.addEventListener('click', as
   }
   try {
     await api.put('/api/health/weights', {
-      weightTax:      document.getElementById('hw-tax').value,
-      weightMining:   document.getElementById('hw-mining').value,
-      weightKills:    document.getElementById('hw-kills').value,
-      weightActivity: document.getElementById('hw-activity').value,
-      inactiveDays:   document.getElementById('hw-inactive').value,
+      weightTax:         document.getElementById('hw-tax').value,
+      weightMining:      document.getElementById('hw-mining').value,
+      weightKills:       document.getElementById('hw-kills').value,
+      weightActivity:    document.getElementById('hw-activity').value,
+      weightFatPap:      document.getElementById('hw-fatpap').value,
+      inactiveDays:      document.getElementById('hw-inactive').value,
+      thresholdHardcore: document.getElementById('hw-threshold-hardcore').value,
+      thresholdActive:   document.getElementById('hw-threshold-active').value,
+      thresholdAtRisk:   document.getElementById('hw-threshold-atrisk').value,
     });
     fb.innerHTML = '<div class="alert alert-ok">Health weights saved.</div>';
     setTimeout(() => { fb.innerHTML = ''; }, 3000);

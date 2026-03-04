@@ -208,4 +208,63 @@ router.get('/pnl', requireAuth, (req, res) => {
   });
 });
 
+/**
+ * GET /api/wallet/multi-pnl?period=YYYY-MM
+ * T-account style P&L for wallet divisions 1, 2, 3.
+ * Each division returns credits (IN) and debits (OUT) grouped by ref_type.
+ * Consolidated totals sum all three divisions (inter-division transfers are
+ * counted in both source and destination — visible in per-division cards).
+ */
+router.get('/multi-pnl', requireAuth, (req, res) => {
+  const period = req.query.period || new Date().toISOString().slice(0, 7);
+
+  const DIVISION_NAMES = {
+    1: 'Division 1 — Master',
+    2: 'Division 2 — Equity',
+    3: 'Division 3 — Profit',
+  };
+
+  const divisions = {};
+  let totalAllIn  = 0;
+  let totalAllOut = 0;
+
+  for (const div of [1, 2, 3]) {
+    const rows = db.prepare(`
+      SELECT ref_type,
+             SUM(CASE WHEN amount > 0 THEN amount     ELSE 0 END) AS credits,
+             SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) AS debits,
+             COUNT(*) AS cnt
+      FROM wallet_journal
+      WHERE division = ? AND date LIKE ?
+      GROUP BY ref_type
+      HAVING credits > 0 OR debits > 0
+      ORDER BY (credits + debits) DESC
+    `).all(div, period + '%');
+
+    const totalIn  = rows.reduce((s, r) => s + r.credits, 0);
+    const totalOut = rows.reduce((s, r) => s + r.debits,  0);
+    totalAllIn  += totalIn;
+    totalAllOut += totalOut;
+
+    divisions[div] = {
+      name:     DIVISION_NAMES[div] || `Division ${div}`,
+      credits:  rows.filter(r => r.credits > 0).map(r => ({ refType: r.ref_type, total: r.credits, count: r.cnt })),
+      debits:   rows.filter(r => r.debits  > 0).map(r => ({ refType: r.ref_type, total: r.debits,  count: r.cnt })),
+      totalIn,
+      totalOut,
+      net: totalIn - totalOut,
+    };
+  }
+
+  res.json({
+    period,
+    divisions,
+    consolidated: {
+      totalIn:  totalAllIn,
+      totalOut: totalAllOut,
+      net:      totalAllIn - totalAllOut,
+    },
+  });
+});
+
 module.exports = router;

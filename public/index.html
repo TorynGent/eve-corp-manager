@@ -224,14 +224,18 @@
             <div class="sub" id="pnl-net-sub">income minus expenses</div>
           </div>
         </div>
-        <div class="grid-2">
+        <div class="grid-3" id="pnl-accounts">
           <div class="card">
-            <div class="card-title">Income Sources</div>
-            <div id="pnl-income-table"><div class="loading"><span class="spinner"></span></div></div>
+            <div class="card-title" style="font-size:0.78rem">Division 1 — Master Wallet</div>
+            <div id="pnl-div1"><div class="loading"><span class="spinner"></span></div></div>
           </div>
           <div class="card">
-            <div class="card-title">Expense Categories</div>
-            <div id="pnl-expense-table"><div class="loading"><span class="spinner"></span></div></div>
+            <div class="card-title" style="font-size:0.78rem">Division 2 — Equity</div>
+            <div id="pnl-div2"><div class="loading"><span class="spinner"></span></div></div>
+          </div>
+          <div class="card">
+            <div class="card-title" style="font-size:0.78rem">Division 3 — Profit</div>
+            <div id="pnl-div3"><div class="loading"><span class="spinner"></span></div></div>
           </div>
         </div>
       </div>
@@ -338,11 +342,12 @@
 
     <!-- ─── MEMBER HEALTH ────────────────────────── -->
     <div class="tab-panel" id="tab-health">
-      <div class="grid-4 mb-20" id="health-kpis">
-        <div class="card kpi"><div class="label">Active</div><div class="value" id="hkpi-active" style="color:var(--green)">—</div><div class="sub">score ≥ 70</div></div>
-        <div class="card kpi"><div class="label">At Risk</div><div class="value" id="hkpi-atrisk" style="color:var(--orange)">—</div><div class="sub">score 30–69</div></div>
-        <div class="card kpi"><div class="label">Inactive</div><div class="value" id="hkpi-inactive" style="color:var(--red)">—</div><div class="sub">score &lt; 30 or login timeout</div></div>
-        <div class="card kpi"><div class="label">Total Mains</div><div class="value" id="hkpi-total">—</div><div class="sub">tracked members</div></div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:20px" id="health-kpis">
+        <div class="card kpi"><div class="label">⚡ Hardcore</div><div class="value" id="hkpi-hardcore" style="color:var(--purple)">—</div><div class="sub" id="hkpi-hardcore-sub">score ≥ 85</div></div>
+        <div class="card kpi"><div class="label">Active</div><div class="value" id="hkpi-active" style="color:var(--green)">—</div><div class="sub" id="hkpi-active-sub">score ≥ 60</div></div>
+        <div class="card kpi"><div class="label">At Risk</div><div class="value" id="hkpi-atrisk" style="color:var(--orange)">—</div><div class="sub" id="hkpi-atrisk-sub">score ≥ 30</div></div>
+        <div class="card kpi"><div class="label">Inactive</div><div class="value" id="hkpi-inactive" style="color:var(--red)">—</div><div class="sub">score &lt; 30 or timed out</div></div>
+        <div class="card kpi"><div class="label">Total Mains</div><div class="value" id="hkpi-total">—</div><div class="sub">tracked</div></div>
       </div>
       <div class="card mb-20">
         <div class="card-title">Member Health Scores — Last 30 Days
@@ -359,11 +364,12 @@
                 <th class="sortable" data-sort="miningScore">Mining</th>
                 <th class="sortable" data-sort="killScore">Kills</th>
                 <th class="sortable" data-sort="activityScore">Activity</th>
+                <th class="sortable" data-sort="fatPapScore" id="health-fatpap-header">FAT/PAP</th>
                 <th class="sortable" data-sort="daysSinceLogin">Last Login</th>
                 <th>Status</th>
               </tr>
             </thead>
-            <tbody id="health-tbody"><tr><td colspan="9" class="loading"><span class="spinner"></span> Loading…</td></tr></tbody>
+            <tbody id="health-tbody"><tr><td colspan="10" class="loading"><span class="spinner"></span> Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -445,10 +451,47 @@
           </div>
         </div>
         <div style="margin-bottom:16px">
+          <label>FAT/PAP Contribution Weight <span style="color:var(--text-dim);font-size:0.72rem">(set 0 to disable — auto-reads FAT PAP Manager DB)</span></label>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px;max-width:400px">
+            <input type="range" id="hw-fatpap" min="0" max="100" step="5" value="0" style="flex:1">
+            <span class="range-val" id="hw-fatpap-val">0%</span>
+          </div>
+        </div>
+        <div style="margin-bottom:16px">
           <label>Inactive Threshold (days without login = score 0 for activity)</label>
           <div style="display:flex;align-items:center;gap:8px;margin-top:8px;max-width:400px">
             <input type="range" id="hw-inactive" min="14" max="180" step="7" value="60" style="flex:1">
             <span class="range-val" id="hw-inactive-val">60 days</span>
+          </div>
+        </div>
+        <!-- Status Thresholds -->
+        <div style="margin-bottom:16px;padding:12px 14px;background:rgba(30,48,79,.35);border-radius:6px;border:1px solid var(--border)">
+          <div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:var(--text-dim);margin-bottom:12px;text-transform:uppercase">Status Thresholds — score ≥ X = that status</div>
+          <div class="grid-3" style="gap:16px">
+            <div>
+              <label style="color:var(--purple)">⚡ Hardcore ≥</label>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+                <input type="number" id="hw-threshold-hardcore" min="0" max="100" value="85"
+                       style="width:70px;padding:5px 8px;font-size:0.85rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                <span style="color:var(--text-dim);font-size:0.75rem">pts</span>
+              </div>
+            </div>
+            <div>
+              <label style="color:var(--green)">Active ≥</label>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+                <input type="number" id="hw-threshold-active" min="0" max="100" value="60"
+                       style="width:70px;padding:5px 8px;font-size:0.85rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                <span style="color:var(--text-dim);font-size:0.75rem">pts</span>
+              </div>
+            </div>
+            <div>
+              <label style="color:var(--orange)">At Risk ≥</label>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+                <input type="number" id="hw-threshold-atrisk" min="0" max="100" value="30"
+                       style="width:70px;padding:5px 8px;font-size:0.85rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                <span style="color:var(--text-dim);font-size:0.75rem">pts — below this = Inactive</span>
+              </div>
+            </div>
           </div>
         </div>
         <div style="display:flex;gap:10px">

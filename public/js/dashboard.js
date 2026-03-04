@@ -28,8 +28,14 @@ async function loadDashboard() {
           borderColor: '#00d4aa', backgroundColor: 'rgba(0,212,170,.08)', fill: true, tension: 0.3 },
       ]);
     } else {
-      document.getElementById('chart-history').closest('.card').innerHTML +=
-        '<p class="empty" style="margin-top:10px">Not enough snapshots yet — use "📸 Snapshot" to record monthly data points.</p>';
+      const histCard = document.getElementById('chart-history').closest('.card');
+      if (!histCard.querySelector('.snapshot-placeholder')) {
+        const p = document.createElement('p');
+        p.className = 'empty snapshot-placeholder';
+        p.style.marginTop = '10px';
+        p.textContent = 'Not enough snapshots yet — use "📸 Snapshot" to record monthly data points.';
+        histCard.appendChild(p);
+      }
     }
 
     // Top taxpayers

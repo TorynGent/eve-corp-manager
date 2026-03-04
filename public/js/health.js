@@ -2,31 +2,54 @@
 
 let _healthData = null;
 let _healthSort = { col: 'healthScore', dir: -1 }; // -1 = desc
+let _fatPapEditing = false;
 
 async function loadHealth() {
   try {
     const data = await api.get('/api/health/members');
     _healthData = data;
-    renderHealthKpis(data.summary);
+    renderHealthKpis(data.summary, data.thresholds);
     renderHealthTable(data);
+
+    // Update column header with FAT/PAP availability
+    const hdr = document.getElementById('health-fatpap-header');
+    if (hdr) {
+      hdr.textContent = data.fatPapAvailable ? 'FAT/PAP ✓' : 'FAT/PAP';
+      hdr.title = data.fatPapAvailable
+        ? 'FAT/PAP points — from FAT PAP DB (click ✏ to override)'
+        : 'FAT/PAP points — no DB data (click ✏ to enter manually)';
+    }
 
     // Show active weights in card-title
     const lbl = document.getElementById('health-weights-label');
     if (lbl) {
       const w = data.weights;
-      lbl.textContent = `Tax ${w.tax}% · Mining ${w.mining}% · Kills ${w.kills}% · Activity ${w.activity}%`;
+      lbl.textContent = `Tax ${w.tax}% · Mining ${w.mining}% · Kills ${w.kills}% · Activity ${w.activity}%` +
+        (w.fatPap > 0 ? ` · FAT/PAP ${w.fatPap}%` : '');
     }
   } catch (err) {
-    document.getElementById('health-tbody').innerHTML =
-      `<tr><td colspan="9" class="alert alert-error">Error: ${esc(err.message)}</td></tr>`;
+    const tbody = document.getElementById('health-tbody');
+    if (tbody) tbody.innerHTML =
+      `<tr><td colspan="10" class="alert alert-error">Error: ${esc(err.message)}</td></tr>`;
   }
 }
 
-function renderHealthKpis(s) {
+function renderHealthKpis(s, thresholds) {
+  document.getElementById('hkpi-hardcore').textContent = s.hardcore;
   document.getElementById('hkpi-active').textContent   = s.active;
   document.getElementById('hkpi-atrisk').textContent   = s.atRisk;
   document.getElementById('hkpi-inactive').textContent = s.inactive;
   document.getElementById('hkpi-total').textContent    = s.total;
+
+  // Update sub text with current threshold values
+  if (thresholds) {
+    const hcSub = document.getElementById('hkpi-hardcore-sub');
+    const acSub = document.getElementById('hkpi-active-sub');
+    const arSub = document.getElementById('hkpi-atrisk-sub');
+    if (hcSub) hcSub.textContent = `score ≥ ${thresholds.hardcore}`;
+    if (acSub) acSub.textContent = `score ≥ ${thresholds.active}`;
+    if (arSub) arSub.textContent = `score ≥ ${thresholds.atRisk}`;
+  }
 }
 
 function renderHealthTable(data) {
@@ -42,21 +65,55 @@ function renderHealthTable(data) {
   });
 
   if (members.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty">No member data yet — run a full sync.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty">No member data yet — run a full sync.</td></tr>';
     return;
   }
 
+  const thr = data.thresholds || { hardcore: 85, active: 60, atRisk: 30 };
+
   tbody.innerHTML = members.map((m, i) => {
-    const statusBadge = m.status === 'active'   ? '<span class="badge badge-green">Active</span>'
-                      : m.status === 'atrisk'   ? '<span class="badge badge-gold">At Risk</span>'
-                      :                           '<span class="badge badge-red">Inactive</span>';
-    const barColor = m.healthScore >= 70 ? 'var(--green)' : m.healthScore >= 30 ? 'var(--orange)' : 'var(--red)';
+    // Status badge
+    let statusBadge;
+    if (m.status === 'hardcore') {
+      statusBadge = '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.7rem;font-weight:700;background:rgba(155,127,212,.2);color:var(--purple);border:1px solid rgba(155,127,212,.4)">⚡ Hardcore</span>';
+    } else if (m.status === 'active') {
+      statusBadge = '<span class="badge badge-green">Active</span>';
+    } else if (m.status === 'atrisk') {
+      statusBadge = '<span class="badge badge-gold">At Risk</span>';
+    } else {
+      statusBadge = '<span class="badge badge-red">Inactive</span>';
+    }
+
+    // Health bar color by status
+    const barColor = m.status === 'hardcore' ? 'var(--purple)'
+                   : m.status === 'active'   ? 'var(--green)'
+                   : m.status === 'atrisk'   ? 'var(--orange)'
+                   : 'var(--red)';
+
     const loginAge = m.daysSinceLogin != null
       ? (m.daysSinceLogin < 1 ? 'Today' : m.daysSinceLogin < 2 ? 'Yesterday' : `${Math.round(m.daysSinceLogin)}d ago`)
       : '—';
     const loginColor = m.daysSinceLogin > data.inactiveDays ? 'var(--red)'
                      : m.daysSinceLogin > data.inactiveDays * 0.5 ? 'var(--orange)'
                      : 'var(--text)';
+
+    // FAT/PAP cell — mini-bar + inline edit button
+    const fpOverrideIcon = m.hasManualFatPap ? '✏✓' : '✏';
+    const fpTitle = m.hasManualFatPap
+      ? `Manual override: ${m.fatPapPoints} pts — click to edit`
+      : `Auto: ${m.fatPapPoints} pts — click to set manual override`;
+
+    const fatPapCell = `
+      <div style="display:flex;align-items:center;gap:4px">
+        ${miniBar(m.fatPapScore, 'var(--purple)')}
+        <button class="btn btn-ghost"
+                style="padding:1px 5px;font-size:0.65rem;min-width:auto;opacity:0.6;line-height:1.4;border-radius:3px"
+                data-mainname="${esc(m.mainName)}"
+                data-points="${m.fatPapPoints}"
+                data-has-override="${m.hasManualFatPap ? '1' : '0'}"
+                onclick="editFatPap(this)"
+                title="${esc(fpTitle)}">${fpOverrideIcon}</button>
+      </div>`;
 
     return `<tr>
       <td class="dim" style="font-size:0.72rem">${i + 1}</td>
@@ -73,6 +130,7 @@ function renderHealthTable(data) {
       <td style="min-width:80px">${miniBar(m.miningScore, 'var(--blue)')}</td>
       <td style="min-width:80px">${miniBar(m.killScore, 'var(--red)')}</td>
       <td style="min-width:80px">${miniBar(m.activityScore, 'var(--purple)')}</td>
+      <td style="min-width:90px">${fatPapCell}</td>
       <td style="color:${loginColor};font-size:0.78rem">${loginAge}</td>
       <td>${statusBadge}</td>
     </tr>`;
@@ -88,7 +146,59 @@ function miniBar(score, color) {
   </div>`;
 }
 
-// Sortable column headers
+// ── FAT/PAP Inline Edit ───────────────────────────────────────────────────────
+
+async function editFatPap(btn) {
+  if (_fatPapEditing) return;
+  _fatPapEditing = true;
+
+  const mainName     = btn.dataset.mainname;    // HTML-decoded by browser
+  const currentPoints = parseInt(btn.dataset.points, 10) || 0;
+  const cell         = btn.closest('td');
+  const origHTML     = cell.innerHTML;
+
+  cell.innerHTML = `
+    <div style="display:flex;align-items:center;gap:4px">
+      <input type="number" id="fp-edit-input" value="${currentPoints}" min="0"
+             style="width:62px;padding:2px 5px;font-size:0.8rem;background:var(--card);color:var(--text);border:1px solid var(--accent);border-radius:4px">
+      <button class="btn btn-primary" id="fp-save-btn"   style="padding:2px 7px;font-size:0.7rem">✓</button>
+      <button class="btn btn-ghost"   id="fp-cancel-btn" style="padding:2px 5px;font-size:0.7rem">✕</button>
+    </div>`;
+
+  const input     = document.getElementById('fp-edit-input');
+  const saveBtn   = document.getElementById('fp-save-btn');
+  const cancelBtn = document.getElementById('fp-cancel-btn');
+
+  input.focus();
+  input.select();
+
+  const save = async () => {
+    const raw = input.value.trim();
+    const val = raw === '' ? null : Math.max(0, parseInt(raw, 10) || 0);
+    try {
+      await api.put('/api/health/fat-pap-overrides', { [mainName]: val });
+      _fatPapEditing = false;
+      loadHealth();
+    } catch {
+      cell.innerHTML = origHTML;
+      _fatPapEditing = false;
+    }
+  };
+
+  const cancel = () => {
+    cell.innerHTML = origHTML;
+    _fatPapEditing = false;
+  };
+
+  saveBtn.addEventListener('click',  save);
+  cancelBtn.addEventListener('click', cancel);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  save();
+    if (e.key === 'Escape') cancel();
+  });
+}
+
+// ── Sortable column headers ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   const table = document.getElementById('health-table');
   if (!table) return;
