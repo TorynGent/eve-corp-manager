@@ -166,4 +166,46 @@ router.get('/periods', requireAuth, (req, res) => {
   res.json(rows.map(r => r.period));
 });
 
+/**
+ * GET /api/wallet/pnl?period=YYYY-MM
+ * Income vs expense breakdown for a given month (default: current month).
+ * Income = positive amounts grouped by ref_type.
+ * Expenses = negative amounts grouped by ref_type (returned as absolute values).
+ */
+router.get('/pnl', requireAuth, (req, res) => {
+  const period = req.query.period || new Date().toISOString().slice(0, 7);
+
+  const income = db.prepare(`
+    SELECT ref_type, SUM(amount) AS total, COUNT(*) AS cnt
+    FROM wallet_journal
+    WHERE division = 1
+      AND date LIKE ?
+      AND amount > 0
+    GROUP BY ref_type
+    ORDER BY total DESC
+  `).all(period + '%');
+
+  const expenses = db.prepare(`
+    SELECT ref_type, SUM(ABS(amount)) AS total, COUNT(*) AS cnt
+    FROM wallet_journal
+    WHERE division = 1
+      AND date LIKE ?
+      AND amount < 0
+    GROUP BY ref_type
+    ORDER BY total DESC
+  `).all(period + '%');
+
+  const totalIncome   = income.reduce((s, r) => s + r.total, 0);
+  const totalExpenses = expenses.reduce((s, r) => s + r.total, 0);
+
+  res.json({
+    period,
+    totalIncome,
+    totalExpenses,
+    netFlow: totalIncome - totalExpenses,
+    income:   income.map(r => ({ refType: r.ref_type, total: r.total, count: r.cnt })),
+    expenses: expenses.map(r => ({ refType: r.ref_type, total: r.total, count: r.cnt })),
+  });
+});
+
 module.exports = router;

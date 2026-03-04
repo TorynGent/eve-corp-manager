@@ -69,6 +69,54 @@ router.get('/', requireAuth, (req, res) => {
   res.json(result);
 });
 
+// GET /api/structures/expiries — items expiring within 30 days, sorted soonest first
+router.get('/expiries', requireAuth, (req, res) => {
+  const THRESHOLD_DAYS = 30;
+  const items = [];
+
+  const structures = db.prepare('SELECT * FROM structures ORDER BY name').all();
+
+  for (const s of structures) {
+    // Fuel blocks
+    if (s.fuel_expires) {
+      const daysLeft = (new Date(s.fuel_expires) - Date.now()) / 86400000;
+      if (daysLeft <= THRESHOLD_DAYS) {
+        items.push({
+          name:       s.name,
+          systemName: s.system_name,
+          type:       'fuel',
+          daysLeft:   parseFloat(daysLeft.toFixed(1)),
+          expiresAt:  s.fuel_expires,
+        });
+      }
+    }
+
+    // Magmatic gas (Metenox only, manual data)
+    if (s.type_id === METENOX_TYPE_ID) {
+      const g = db.prepare('SELECT * FROM structure_gas WHERE structure_id = ?').get(s.structure_id);
+      if (g && g.last_refill_date && g.quantity_refilled > 0) {
+        const refillMs  = new Date(g.last_refill_date).getTime();
+        const elapsed   = Date.now() - refillMs;
+        const remaining = g.quantity_refilled - (elapsed / 86400000) * g.daily_consumption;
+        const daysLeft  = remaining > 0 ? remaining / g.daily_consumption : 0;
+        const expires   = new Date(refillMs + (g.quantity_refilled / g.daily_consumption) * 86400000);
+        if (daysLeft <= THRESHOLD_DAYS) {
+          items.push({
+            name:       s.name,
+            systemName: s.system_name,
+            type:       'gas',
+            daysLeft:   parseFloat(daysLeft.toFixed(1)),
+            expiresAt:  expires.toISOString(),
+          });
+        }
+      }
+    }
+  }
+
+  items.sort((a, b) => a.daysLeft - b.daysLeft);
+  res.json(items);
+});
+
 // PUT /api/structures/:id/gas — update manual gas data
 router.put('/:id/gas', requireAuth, (req, res) => {
   const structureId = parseInt(req.params.id, 10);

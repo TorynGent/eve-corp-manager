@@ -73,3 +73,8 @@ function fmtNum(n) {
   if (n == null) return '—';
   return Math.round(n).toLocaleString('en-US');
 }
+
+// XSS-safe HTML escape — use whenever inserting external/user data into innerHTML
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}

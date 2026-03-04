@@ -1,10 +1,13 @@
 async function loadDashboard() {
   try {
-    const [summary, snapshots, taxpayers, kills] = await Promise.all([
+    const [summary, snapshots, taxpayers, kills, scratchpad, expiries, dividends] = await Promise.all([
       api.get('/api/summary'),
       api.get('/api/snapshots'),
       api.get('/api/wallet/taxpayers'),
       api.get('/api/kills'),
+      api.get('/api/settings/scratchpad'),
+      api.get('/api/structures/expiries'),
+      api.get('/api/dividends'),
     ]);
 
     // KPI tiles — wallet breakdown by division
@@ -34,6 +37,15 @@ async function loadDashboard() {
 
     // Top 5 corp killers
     renderTopKillers(kills.top10?.slice(0, 5) || [], kills.periodLabel || kills.period, kills.totalKills);
+
+    // CEO Scratchpad
+    initScratchpad(scratchpad.text || '');
+
+    // Upcoming Expiries
+    renderExpiries(expiries);
+
+    // Dividend History
+    renderDividends(dividends);
 
   } catch (err) {
     console.error('Dashboard load error:', err);
@@ -103,4 +115,95 @@ function renderTopKillers(data, period, totalKills) {
         <div class="bar-fill" style="width:${(d.kills/maxKills*100).toFixed(1)}%;background:var(--red)"></div>
       </div>
     </div>`).join('');
+}
+
+// ── Upcoming Expiries ──────────────────────────────────────────────────────────
+function renderExpiries(items) {
+  const el = document.getElementById('expiries-content');
+  if (!el) return;
+  if (!items || items.length === 0) {
+    el.innerHTML = '<p class="empty" style="font-size:0.78rem;color:var(--green)">No structures expiring within 30 days.</p>';
+    return;
+  }
+  el.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:0.76rem">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:5px 6px;color:var(--text-dim);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)">Structure</th>
+          <th style="text-align:left;padding:5px 6px;color:var(--text-dim);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)">Type</th>
+          <th style="text-align:right;padding:5px 6px;color:var(--text-dim);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)">Days Left</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map(item => {
+          const d     = item.daysLeft;
+          const color = d < 7 ? 'var(--red)' : d < 14 ? 'var(--orange)' : 'var(--gold)';
+          const icon  = item.type === 'fuel' ? '⛽' : '💨';
+          const name  = esc(item.name.length > 22 ? item.name.slice(0, 20) + '…' : item.name);
+          return `<tr>
+            <td style="padding:5px 6px;border-bottom:1px solid rgba(30,48,79,.4)" title="${esc(item.name)} — ${esc(item.systemName)}">${name}</td>
+            <td style="padding:5px 6px;border-bottom:1px solid rgba(30,48,79,.4)">${icon} ${item.type}</td>
+            <td style="padding:5px 6px;border-bottom:1px solid rgba(30,48,79,.4);text-align:right;font-weight:700;color:${color}">${d.toFixed(1)}d</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
+// ── Dividend History ───────────────────────────────────────────────────────────
+function renderDividends(data) {
+  const el = document.getElementById('dividends-content');
+  if (!el) return;
+  if (!data.available) {
+    el.innerHTML = '<p class="empty" style="font-size:0.78rem;color:var(--text-dim)">FAT PAP Manager not installed or no data yet.</p>';
+    return;
+  }
+  if (!data.periods || data.periods.length === 0) {
+    el.innerHTML = '<p class="empty" style="font-size:0.78rem;color:var(--text-dim)">No payout periods recorded yet.</p>';
+    return;
+  }
+  const rows = [...data.periods].reverse(); // oldest first
+  el.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:0.76rem">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:5px 6px;color:var(--text-dim);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)">#</th>
+          <th style="text-align:left;padding:5px 6px;color:var(--text-dim);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)">Period</th>
+          <th style="text-align:right;padding:5px 6px;color:var(--text-dim);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)">Income</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(p => `<tr>
+          <td style="padding:5px 6px;border-bottom:1px solid rgba(30,48,79,.4);color:var(--text-dim)">${p.id}</td>
+          <td style="padding:5px 6px;border-bottom:1px solid rgba(30,48,79,.4)">
+            ${esc(p.start_date || '?')} – ${esc(p.end_date || '?')}
+          </td>
+          <td style="padding:5px 6px;border-bottom:1px solid rgba(30,48,79,.4);text-align:right" class="isk">${fmtISK(p.income)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+// ── CEO Scratchpad ─────────────────────────────────────────────────────────────
+let _scratchpadInited = false;
+
+function initScratchpad(savedText) {
+  const pad    = document.getElementById('scratchpad');
+  const status = document.getElementById('scratchpad-status');
+  if (!pad) return;
+
+  // Always refresh text from server (handles edits from another session)
+  pad.value = savedText;
+
+  if (_scratchpadInited) return; // only wire events once
+  _scratchpadInited = true;
+
+  pad.addEventListener('blur', async () => {
+    try {
+      await api.put('/api/settings/scratchpad', { text: pad.value });
+      if (status) { status.textContent = 'Saved'; setTimeout(() => { status.textContent = ''; }, 2000); }
+    } catch {
+      if (status) { status.textContent = 'Save failed'; setTimeout(() => { status.textContent = ''; }, 3000); }
+    }
+  });
 }

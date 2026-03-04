@@ -204,8 +204,72 @@ document.getElementById('csv-file-input')?.addEventListener('change', async (e) 
   setTimeout(() => { fb.innerHTML = ''; }, 5000);
 });
 
+// ── Member Health Weights ─────────────────────────────────────────────────────
+function updateHealthWeightSum() {
+  const sum = ['hw-tax','hw-mining','hw-kills','hw-activity'].reduce((s, id) => {
+    return s + parseInt(document.getElementById(id).value, 10);
+  }, 0);
+  const lbl = document.getElementById('health-weight-sum-label');
+  if (!lbl) return;
+  lbl.textContent = `(Total: ${sum}%)`;
+  lbl.style.color = sum === 100 ? 'var(--green)' : 'var(--orange)';
+}
+
+['hw-tax','hw-mining','hw-kills','hw-activity'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', e => {
+    document.getElementById(id + '-val').textContent = e.target.value + '%';
+    updateHealthWeightSum();
+  });
+});
+document.getElementById('hw-inactive')?.addEventListener('input', e => {
+  document.getElementById('hw-inactive-val').textContent = e.target.value + ' days';
+});
+
+async function loadHealthWeights() {
+  try {
+    const cfg = await api.get('/api/health/weights');
+    document.getElementById('hw-tax').value         = cfg.weightTax;
+    document.getElementById('hw-mining').value      = cfg.weightMining;
+    document.getElementById('hw-kills').value       = cfg.weightKills;
+    document.getElementById('hw-activity').value    = cfg.weightActivity;
+    document.getElementById('hw-inactive').value    = cfg.inactiveDays;
+    document.getElementById('hw-tax-val').textContent      = cfg.weightTax      + '%';
+    document.getElementById('hw-mining-val').textContent   = cfg.weightMining   + '%';
+    document.getElementById('hw-kills-val').textContent    = cfg.weightKills    + '%';
+    document.getElementById('hw-activity-val').textContent = cfg.weightActivity + '%';
+    document.getElementById('hw-inactive-val').textContent = cfg.inactiveDays   + ' days';
+    updateHealthWeightSum();
+  } catch (err) { console.error('Health weights load error:', err); }
+}
+
+document.getElementById('btn-save-health-weights')?.addEventListener('click', async () => {
+  const fb  = document.getElementById('health-weights-feedback');
+  const sum = ['hw-tax','hw-mining','hw-kills','hw-activity'].reduce((s, id) => {
+    return s + parseInt(document.getElementById(id).value, 10);
+  }, 0);
+  if (sum !== 100) {
+    fb.innerHTML = `<div class="alert alert-warn">Weights must sum to 100 (currently ${sum}).</div>`;
+    setTimeout(() => { fb.innerHTML = ''; }, 4000);
+    return;
+  }
+  try {
+    await api.put('/api/health/weights', {
+      weightTax:      document.getElementById('hw-tax').value,
+      weightMining:   document.getElementById('hw-mining').value,
+      weightKills:    document.getElementById('hw-kills').value,
+      weightActivity: document.getElementById('hw-activity').value,
+      inactiveDays:   document.getElementById('hw-inactive').value,
+    });
+    fb.innerHTML = '<div class="alert alert-ok">Health weights saved.</div>';
+    setTimeout(() => { fb.innerHTML = ''; }, 3000);
+  } catch (err) {
+    fb.innerHTML = `<div class="alert alert-error">Error: ${esc(err.message)}</div>`;
+  }
+});
+
 function loadSettings() {
   loadMappings();
   loadSyncStatus();
+  loadHealthWeights();
   loadNotificationSettings();
 }

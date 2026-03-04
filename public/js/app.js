@@ -91,6 +91,7 @@ function loadTabContent(name) {
     case 'wallet':     loadWallet();      break;
     case 'mining':     loadMining();      break;
     case 'kills':      loadKills();       break;
+    case 'health':     loadHealth();      break;
     case 'settings':   loadSettings();    break;
   }
 }
@@ -104,6 +105,7 @@ function refreshTab(name) {
     case 'wallet':     loadTaxCharts(); loadWalletHistory(); break;
     case 'mining':     loadMining();      break;
     case 'kills':      loadKills();       break;
+    case 'health':     loadHealth();      break;
     case 'settings':   loadSyncStatus();  break;
   }
 }

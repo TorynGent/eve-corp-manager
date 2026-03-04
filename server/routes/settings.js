@@ -128,6 +128,19 @@ router.post('/sync-now', requireAuth, async (req, res) => {
   }
 });
 
+// ── CEO Scratchpad ─────────────────────────────────────────────────────────────
+
+// GET /api/settings/scratchpad
+router.get('/scratchpad', requireAuth, (req, res) => {
+  res.json({ text: getSetting('scratchpad_text', '') });
+});
+
+// PUT /api/settings/scratchpad
+router.put('/scratchpad', requireAuth, (req, res) => {
+  setSetting('scratchpad_text', String(req.body.text ?? ''));
+  res.json({ ok: true });
+});
+
 // ── CSV Alt→Main Import ────────────────────────────────────────────────────────
 
 // POST /api/settings/mappings/csv — import alt→main from CSV text

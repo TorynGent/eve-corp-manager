@@ -3,6 +3,7 @@ let journalPages = 1;
 
 async function loadWallet() {
   await Promise.all([
+    loadPnl(),
     loadTaxCharts(),
     loadJournal(),
     loadWalletHistory(),
@@ -132,5 +133,62 @@ document.getElementById('journal-filter').addEventListener('keydown', e => {
   if (e.key === 'Enter') { journalPage = 1; loadJournal(); }
 });
 document.getElementById('wallet-period-select').addEventListener('change', () => {
-  journalPage = 1; loadTaxCharts(); loadJournal();
+  journalPage = 1; loadPnl(); loadTaxCharts(); loadJournal();
 });
+
+// ── P&L ───────────────────────────────────────────────────────────────────────
+
+function fmtRefType(s) {
+  return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+async function loadPnl() {
+  const period = document.getElementById('wallet-period-select').value || null;
+  try {
+    const data = await api.get('/api/wallet/pnl', period ? { period } : {});
+    renderPnl(data);
+  } catch (err) {
+    console.error('P&L error:', err);
+  }
+}
+
+function renderPnl(data) {
+  const netColor = data.netFlow >= 0 ? 'var(--green)' : 'var(--red)';
+  const netSign  = data.netFlow >= 0 ? '+' : '';
+  document.getElementById('pnl-income').textContent   = fmtISK(data.totalIncome) + ' ISK';
+  document.getElementById('pnl-expenses').textContent = fmtISK(data.totalExpenses) + ' ISK';
+  const netEl = document.getElementById('pnl-net');
+  netEl.textContent = netSign + fmtISK(data.netFlow) + ' ISK';
+  netEl.style.color = netColor;
+  document.getElementById('pnl-period-label').textContent = data.period;
+
+  document.getElementById('pnl-income-table').innerHTML  = renderPnlTable(data.income,   data.totalIncome);
+  document.getElementById('pnl-expense-table').innerHTML = renderPnlTable(data.expenses, data.totalExpenses);
+}
+
+function renderPnlTable(rows, total) {
+  if (!rows || rows.length === 0) {
+    return '<p class="empty" style="font-size:0.78rem">No data for this period.</p>';
+  }
+  const maxVal = rows[0].total;
+  return `<table style="width:100%;border-collapse:collapse;font-size:0.76rem">
+    <thead><tr>
+      <th style="text-align:left;padding:5px 6px;color:var(--text-dim);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)">Type</th>
+      <th style="text-align:right;padding:5px 6px;color:var(--text-dim);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)">ISK</th>
+      <th style="text-align:right;padding:5px 6px;color:var(--text-dim);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)">%</th>
+      <th style="min-width:80px;padding:5px 6px;border-bottom:1px solid var(--border)"></th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const pct  = total > 0 ? (r.total / total * 100).toFixed(1) : 0;
+      const barW = maxVal > 0 ? (r.total / maxVal * 100).toFixed(1) : 0;
+      return `<tr>
+        <td style="padding:5px 6px;border-bottom:1px solid rgba(30,48,79,.4)">${esc(fmtRefType(r.refType))}</td>
+        <td style="padding:5px 6px;border-bottom:1px solid rgba(30,48,79,.4);text-align:right" class="isk">${fmtISK(r.total)}</td>
+        <td style="padding:5px 6px;border-bottom:1px solid rgba(30,48,79,.4);text-align:right;color:var(--text-dim);font-size:0.7rem">${pct}%</td>
+        <td style="padding:5px 6px;border-bottom:1px solid rgba(30,48,79,.4)">
+          <div class="bar-outer"><div class="bar-fill bar-blue" style="width:${barW}%"></div></div>
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}

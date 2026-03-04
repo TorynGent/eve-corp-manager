@@ -1,6 +1,7 @@
 'use strict';
 const express = require('express');
 const router  = express.Router();
+const path    = require('path');
 const { requireAuth } = require('../auth');
 const { db, getToken, getSetting } = require('../db');
 
@@ -85,6 +86,26 @@ router.post('/snapshots/create', requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GET /api/dividends — last 6 FAT PAP payout periods (read-only from fat-pap-manager DB)
+router.get('/dividends', requireAuth, (req, res) => {
+  try {
+    const { app } = require('electron');
+    const fatPapDb = path.join(path.dirname(app.getPath('userData')), 'fat-pap-manager', 'data.db');
+    const Database = require('better-sqlite3');
+    const fpDb = new Database(fatPapDb, { readonly: true, fileMustExist: true });
+    try {
+      const periods = fpDb.prepare(
+        'SELECT id, start_date, end_date, income FROM pap_periods ORDER BY id DESC LIMIT 6'
+      ).all();
+      res.json({ available: true, periods });
+    } finally {
+      fpDb.close();
+    }
+  } catch {
+    res.json({ available: false });
   }
 });
 
