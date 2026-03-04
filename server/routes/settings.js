@@ -153,26 +153,39 @@ router.post('/mappings/csv', requireAuth, (req, res) => {
   let imported = 0;
   const errors = [];
 
+  // Parse all lines first so we don't wipe the DB if the CSV is malformed
+  const rows = [];
   for (const line of lines) {
     const commaIdx = line.indexOf(',');
     if (commaIdx < 1) { errors.push(`Bad format: "${line}"`); continue; }
     const altName  = line.slice(0, commaIdx).trim();
     const mainName = line.slice(commaIdx + 1).trim();
     if (!altName || !mainName) { errors.push(`Empty field: "${line}"`); continue; }
+    rows.push({ altName, mainName });
+  }
 
-    // Look up character ID from name_cache; fall back to deterministic negative ID
-    const cached = db.prepare('SELECT id FROM name_cache WHERE LOWER(name) = LOWER(?)').get(altName);
-    const charId = cached?.id || -(Math.abs(hashStr(altName)) % 999_999_998 + 1);
+  if (rows.length === 0) {
+    return res.status(400).json({ error: 'No valid rows found in CSV', errors });
+  }
 
-    db.prepare(`
+  // Overwrite: delete all existing mappings then insert the new set atomically
+  const doImport = db.transaction(() => {
+    db.prepare('DELETE FROM alt_mappings').run();
+    const stmt = db.prepare(`
       INSERT INTO alt_mappings (character_id, character_name, main_name)
       VALUES (?, ?, ?)
       ON CONFLICT(character_id) DO UPDATE SET
         character_name = excluded.character_name,
         main_name      = excluded.main_name
-    `).run(charId, altName, mainName);
-    imported++;
-  }
+    `);
+    for (const { altName, mainName } of rows) {
+      const cached = db.prepare('SELECT id FROM name_cache WHERE LOWER(name) = LOWER(?)').get(altName);
+      const charId = cached?.id || -(Math.abs(hashStr(altName)) % 999_999_998 + 1);
+      stmt.run(charId, altName, mainName);
+      imported++;
+    }
+  });
+  doImport();
 
   res.json({ ok: true, imported, errors: errors.slice(0, 20) });
 });

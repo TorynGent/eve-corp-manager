@@ -153,17 +153,17 @@ async function loadPnl() {
 }
 
 function renderPnl(data) {
-  // Consolidated KPI tiles (sum across all 3 divisions)
-  const c       = data.consolidated;
-  const netColor = c.net >= 0 ? 'var(--green)' : 'var(--red)';
-  const netSign  = c.net >= 0 ? '+' : '';
-  document.getElementById('pnl-income').textContent   = fmtISK(c.totalIn)  + ' ISK';
-  document.getElementById('pnl-expenses').textContent = fmtISK(c.totalOut) + ' ISK';
+  // Consolidated KPI tiles — real income/expenses (inter-division excluded)
+  const c        = data.consolidated;
+  const netColor = c.realNet >= 0 ? 'var(--green)' : 'var(--red)';
+  const netSign  = c.realNet >= 0 ? '+' : '';
+  document.getElementById('pnl-income').textContent   = fmtISK(c.realIncome)   + ' ISK';
+  document.getElementById('pnl-expenses').textContent = fmtISK(c.realExpenses) + ' ISK';
   const netEl = document.getElementById('pnl-net');
-  netEl.textContent = netSign + fmtISK(c.net) + ' ISK';
+  netEl.textContent = netSign + fmtISK(c.realNet) + ' ISK';
   netEl.style.color = netColor;
   document.getElementById('pnl-period-label').textContent = data.period;
-  document.getElementById('pnl-net-sub').textContent = '(incl. inter-division)';
+  document.getElementById('pnl-net-sub').textContent = 'external only';
 
   // Per-division T-account cards
   for (const div of [1, 2, 3]) {
@@ -172,56 +172,67 @@ function renderPnl(data) {
   }
 }
 
-/** Render a single-division T-account view (stacked IN / OUT with bars). */
+/** Render a single-division T-account view (external + internal separated). */
 function renderPnlDivision(div) {
   if (!div) return '<p class="empty" style="font-size:0.78rem">No data.</p>';
 
-  const maxBar   = Math.max(div.totalIn, div.totalOut, 1);
+  const allIn  = div.extIn  + div.intIn;
+  const allOut = div.extOut + div.intOut;
+  const maxBar = Math.max(allIn, allOut, 1);
   const netColor = div.net >= 0 ? 'var(--green)' : 'var(--red)';
   const netSign  = div.net >= 0 ? '+' : '';
 
-  let html = `<div style="font-size:0.73rem;margin-bottom:10px;padding:5px 7px;background:rgba(30,48,79,.35);border-radius:4px;display:flex;justify-content:space-between">
-    <span style="color:var(--text-dim)">Net</span>
-    <strong style="color:${netColor}">${netSign}${fmtISK(div.net)} ISK</strong>
-  </div>`;
+  // Balance + net row
+  let html = `<div style="display:flex;justify-content:space-between;font-size:0.73rem;margin-bottom:8px;gap:10px">`;
+  if (div.currentBalance !== null) {
+    html += `<span style="color:var(--text-dim)">Balance: <strong style="color:var(--isk)">${fmtISK(div.currentBalance)} ISK</strong></span>`;
+  }
+  html += `<span style="color:var(--text-dim);margin-left:auto">Net: <strong style="color:${netColor}">${netSign}${fmtISK(div.net)} ISK</strong></span>`;
+  html += `</div>`;
 
-  // IN section
-  if (div.credits.length) {
-    html += `<div style="font-size:0.63rem;text-transform:uppercase;letter-spacing:1px;color:var(--green);margin-bottom:5px;font-weight:700">
-      ▲ IN — ${fmtISK(div.totalIn)}
+  const makeRows = (rows, color, cssClass) => rows.map(r => {
+    const pct = (r.total / maxBar * 100).toFixed(1);
+    const amtStyle = cssClass ? `class="${cssClass}"` : `style="color:${color};font-size:0.7rem"`;
+    return `<div style="margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;font-size:0.71rem;margin-bottom:2px">
+        <span style="color:var(--text-dim)">${esc(fmtRefType(r.refType))}</span>
+        <span ${amtStyle} style="font-size:0.7rem">${fmtISK(r.total)}</span>
+      </div>
+      <div class="bar-outer">
+        <div style="height:100%;border-radius:4px;background:${color};width:${pct}%;transition:width 0.3s"></div>
+      </div>
     </div>`;
-    html += div.credits.map(r => {
-      const pct = (r.total / maxBar * 100).toFixed(1);
-      return `<div style="margin-bottom:6px">
-        <div style="display:flex;justify-content:space-between;font-size:0.71rem;margin-bottom:2px">
-          <span style="color:var(--text-dim)">${esc(fmtRefType(r.refType))}</span>
-          <span class="isk" style="font-size:0.7rem">${fmtISK(r.total)}</span>
-        </div>
-        <div class="bar-outer"><div class="bar-fill bar-green" style="width:${pct}%"></div></div>
-      </div>`;
-    }).join('');
+  }).join('');
+
+  // External IN
+  if (div.externalCredits.length) {
+    html += `<div style="font-size:0.63rem;text-transform:uppercase;letter-spacing:1px;color:var(--green);margin-bottom:5px;font-weight:700">▲ IN — ${fmtISK(div.extIn)}</div>`;
+    html += makeRows(div.externalCredits, 'var(--green)', 'isk');
   }
 
-  // OUT section
-  if (div.debits.length) {
-    html += `<div style="font-size:0.63rem;text-transform:uppercase;letter-spacing:1px;color:var(--red);margin:10px 0 5px;font-weight:700">
-      ▼ OUT — ${fmtISK(div.totalOut)}
-    </div>`;
-    html += div.debits.map(r => {
-      const pct = (r.total / maxBar * 100).toFixed(1);
-      return `<div style="margin-bottom:6px">
-        <div style="display:flex;justify-content:space-between;font-size:0.71rem;margin-bottom:2px">
-          <span style="color:var(--text-dim)">${esc(fmtRefType(r.refType))}</span>
-          <span style="color:var(--red);font-size:0.7rem">${fmtISK(r.total)}</span>
-        </div>
-        <div class="bar-outer">
-          <div style="height:100%;border-radius:4px;background:var(--red);width:${pct}%;transition:width 0.3s"></div>
-        </div>
-      </div>`;
-    }).join('');
+  // External OUT (real expenses)
+  if (div.externalDebits.length) {
+    html += `<div style="font-size:0.63rem;text-transform:uppercase;letter-spacing:1px;color:var(--red);margin:10px 0 5px;font-weight:700">▼ OUT — ${fmtISK(div.extOut)}</div>`;
+    html += makeRows(div.externalDebits, 'var(--red)', null);
   }
 
-  if (!div.credits.length && !div.debits.length) {
+  // Internal flows (inter-division transfers) — shown dimmed at bottom
+  const hasInternal = div.internalCredits.length || div.internalDebits.length;
+  if (hasInternal) {
+    html += `<div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(30,48,79,.6)">
+      <div style="font-size:0.63rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:6px;font-weight:700">↔ INTER-DIVISION TRANSFERS</div>`;
+    if (div.internalCredits.length) {
+      html += `<div style="font-size:0.63rem;color:var(--text-dim);margin-bottom:4px">▲ received ${fmtISK(div.intIn)}</div>`;
+      html += makeRows(div.internalCredits, 'rgba(0,212,170,.35)', null);
+    }
+    if (div.internalDebits.length) {
+      html += `<div style="font-size:0.63rem;color:var(--text-dim);margin:6px 0 4px">▼ sent ${fmtISK(div.intOut)}</div>`;
+      html += makeRows(div.internalDebits, 'rgba(255,85,85,.3)', null);
+    }
+    html += `</div>`;
+  }
+
+  if (!div.externalCredits.length && !div.externalDebits.length && !hasInternal) {
     html += '<p class="empty" style="font-size:0.78rem">No wallet entries this period.</p>';
   }
 

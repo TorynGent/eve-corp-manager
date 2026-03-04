@@ -211,10 +211,17 @@ router.get('/pnl', requireAuth, (req, res) => {
 /**
  * GET /api/wallet/multi-pnl?period=YYYY-MM
  * T-account style P&L for wallet divisions 1, 2, 3.
- * Each division returns credits (IN) and debits (OUT) grouped by ref_type.
- * Consolidated totals sum all three divisions (inter-division transfers are
- * counted in both source and destination — visible in per-division cards).
+ *
+ * "corporation_account_withdrawal" is EVE's ref_type for BOTH sides of an
+ * inter-division transfer (debit in source, credit in destination).
+ * It is NOT a real external expense. We keep it visible in each division card
+ * but exclude it from the consolidated "real P&L" totals.
+ *
+ * Real income   = external credits (excl. inter-div types)
+ * Real expenses = external debits  (excl. inter-div types)
  */
+const INTER_DIV_TYPES = new Set(['corporation_account_withdrawal']);
+
 router.get('/multi-pnl', requireAuth, (req, res) => {
   const period = req.query.period || new Date().toISOString().slice(0, 7);
 
@@ -225,13 +232,13 @@ router.get('/multi-pnl', requireAuth, (req, res) => {
   };
 
   const divisions = {};
-  let totalAllIn  = 0;
-  let totalAllOut = 0;
+  let realIncomeTotal  = 0;
+  let realExpenseTotal = 0;
 
   for (const div of [1, 2, 3]) {
     const rows = db.prepare(`
       SELECT ref_type,
-             SUM(CASE WHEN amount > 0 THEN amount     ELSE 0 END) AS credits,
+             SUM(CASE WHEN amount > 0 THEN amount      ELSE 0 END) AS credits,
              SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) AS debits,
              COUNT(*) AS cnt
       FROM wallet_journal
@@ -241,18 +248,33 @@ router.get('/multi-pnl', requireAuth, (req, res) => {
       ORDER BY (credits + debits) DESC
     `).all(div, period + '%');
 
-    const totalIn  = rows.reduce((s, r) => s + r.credits, 0);
-    const totalOut = rows.reduce((s, r) => s + r.debits,  0);
-    totalAllIn  += totalIn;
-    totalAllOut += totalOut;
+    const external = rows.filter(r => !INTER_DIV_TYPES.has(r.ref_type));
+    const internal = rows.filter(r =>  INTER_DIV_TYPES.has(r.ref_type));
+
+    const extIn  = external.reduce((s, r) => s + r.credits, 0);
+    const extOut = external.reduce((s, r) => s + r.debits,  0);
+    const intIn  = internal.reduce((s, r) => s + r.credits, 0);
+    const intOut = internal.reduce((s, r) => s + r.debits,  0);
+
+    realIncomeTotal  += extIn;
+    realExpenseTotal += extOut;
+
+    // Current live balance from last wallet sync (stored by scheduler)
+    const balanceSetting = getSetting(`wallet_balance_${div}`);
+    const currentBalance = balanceSetting !== null ? parseFloat(balanceSetting) : null;
 
     divisions[div] = {
-      name:     DIVISION_NAMES[div] || `Division ${div}`,
-      credits:  rows.filter(r => r.credits > 0).map(r => ({ refType: r.ref_type, total: r.credits, count: r.cnt })),
-      debits:   rows.filter(r => r.debits  > 0).map(r => ({ refType: r.ref_type, total: r.debits,  count: r.cnt })),
-      totalIn,
-      totalOut,
-      net: totalIn - totalOut,
+      name:            DIVISION_NAMES[div] || `Division ${div}`,
+      currentBalance,
+      externalCredits: external.filter(r => r.credits > 0).map(r => ({ refType: r.ref_type, total: r.credits, count: r.cnt })),
+      externalDebits:  external.filter(r => r.debits  > 0).map(r => ({ refType: r.ref_type, total: r.debits,  count: r.cnt })),
+      internalCredits: internal.filter(r => r.credits > 0).map(r => ({ refType: r.ref_type, total: r.credits, count: r.cnt })),
+      internalDebits:  internal.filter(r => r.debits  > 0).map(r => ({ refType: r.ref_type, total: r.debits,  count: r.cnt })),
+      extIn,
+      extOut,
+      intIn,
+      intOut,
+      net: extIn - extOut + intIn - intOut,
     };
   }
 
@@ -260,9 +282,9 @@ router.get('/multi-pnl', requireAuth, (req, res) => {
     period,
     divisions,
     consolidated: {
-      totalIn:  totalAllIn,
-      totalOut: totalAllOut,
-      net:      totalAllIn - totalAllOut,
+      realIncome:   realIncomeTotal,
+      realExpenses: realExpenseTotal,
+      realNet:      realIncomeTotal - realExpenseTotal,
     },
   });
 });
