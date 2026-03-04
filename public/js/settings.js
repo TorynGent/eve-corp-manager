@@ -110,6 +110,7 @@ async function loadNotificationSettings() {
     document.getElementById('smtp-port').value       = cfg.smtpPort || '587';
     document.getElementById('smtp-user').value       = cfg.smtpUser || '';
     document.getElementById('smtp-from').value       = cfg.smtpFrom || '';
+    document.getElementById('smtp-pass').placeholder = cfg.smtpPassSet ? '••••••••  (saved — leave blank to keep)' : 'Password';
     document.getElementById('smtp-recipients').value = cfg.recipients || '';
     document.getElementById('fuel-threshold').value  = cfg.fuelThresholdDays || 14;
     document.getElementById('gas-threshold').value   = cfg.gasThresholdDays  || 7;

@@ -1,12 +1,13 @@
 'use strict';
 const nodemailer = require('nodemailer');
 const { db, getSetting } = require('./db');
+const { decryptValue } = require('./secure-storage');
 
 function buildTransport() {
   const host = getSetting('smtp_host', process.env.SMTP_HOST || '');
   const port = parseInt(getSetting('smtp_port', process.env.SMTP_PORT || '587'), 10);
   const user = getSetting('smtp_user', process.env.SMTP_USER || '');
-  const pass = getSetting('smtp_pass', process.env.SMTP_PASS || '');
+  const pass = decryptValue(getSetting('smtp_pass', process.env.SMTP_PASS || ''));
   const tls  = getSetting('smtp_tls', 'true') === 'true';
 
   if (!host || !user) throw new Error('SMTP not configured. Go to Settings → Notifications.');

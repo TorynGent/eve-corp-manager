@@ -179,13 +179,42 @@ document.getElementById('gas-modal-cancel').addEventListener('click', closeGasMo
 document.getElementById('gas-modal-save').addEventListener('click', saveGasModal);
 
 // ── Manual location name override ─────────────────────────────────────────────
-async function editLocName(locationId, currentName) {
-  const newName = prompt(`Custom name for this location:\n(Leave blank to clear override and use auto-resolved name)`, currentName);
-  if (newName === null) return; // user cancelled
+let _locRenameId = null;
+
+function editLocName(locationId, currentName) {
+  _locRenameId = locationId;
+  const input = document.getElementById('loc-rename-input');
+  input.value = currentName || '';
+  document.getElementById('loc-rename-modal').style.display = 'flex';
+  setTimeout(() => input.focus(), 50);
+}
+
+document.getElementById('loc-rename-cancel').addEventListener('click', () => {
+  document.getElementById('loc-rename-modal').style.display = 'none';
+  _locRenameId = null;
+});
+
+document.getElementById('loc-rename-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) {
+    document.getElementById('loc-rename-modal').style.display = 'none';
+    _locRenameId = null;
+  }
+});
+
+document.getElementById('loc-rename-save').addEventListener('click', async () => {
+  if (_locRenameId == null) return;
+  const newName = document.getElementById('loc-rename-input').value;
+  document.getElementById('loc-rename-modal').style.display = 'none';
   try {
-    await api.put('/api/structures/location-name', { locationId, name: newName });
+    await api.put('/api/structures/location-name', { locationId: _locRenameId, name: newName });
     loadStructureInventory();
   } catch (err) {
     alert('Failed to save name: ' + err.message);
   }
-}
+  _locRenameId = null;
+});
+
+document.getElementById('loc-rename-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('loc-rename-save').click();
+  if (e.key === 'Escape') document.getElementById('loc-rename-cancel').click();
+});

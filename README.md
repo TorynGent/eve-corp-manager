@@ -1,124 +1,133 @@
-# EVE Corp Dashboard — Setup Guide
+# EVE Corp Manager
 
-## Step 1: Install Node.js
-
-Download and install from https://nodejs.org (choose the **LTS** version).
-
-After installing, open a new Command Prompt and verify:
-```
-node --version    # should print v20.x or similar
-npm --version     # should print 10.x or similar
-```
+A private, local-only corporation management dashboard for EVE Online. All data stays on your machine — nothing is sent anywhere except to ESI (esi.evetech.net) and your SMTP server if you configure email alerts.
 
 ---
 
-## Step 2: Register your EVE SSO Application
+## For End Users — Installing the App
 
-1. Go to https://developers.eveonline.com/applications
-2. Click **Create New Application**
-3. Fill in:
-   - **Name**: EVE Corp Dashboard (or anything you like)
-   - **Description**: Personal corp management dashboard
-   - **Connection Type**: Authentication & API Access
-   - **Callback URL**: `http://localhost:3000/auth/callback`
-   - **Scopes**: Add all of these:
-     - `esi-wallet.read_corporation_wallets.v1`
-     - `esi-corporations.read_structures.v1`
-     - `esi-corporations.read_members.v1`
-     - `esi-corporations.read_membertracking.v1`
-     - `esi-corporations.read_mining.v1`
-     - `esi-assets.read_corporation_assets.v1`
-     - `esi-universe.read_structures.v1`
-4. Click **Create Application**
-5. Copy the **Client ID** and **Secret Key**
+1. Download the latest `EVE-Corp-Manager-Setup-x.x.x.exe` from the [Releases](../../releases) page
+2. Run the installer, choose your install path, let it finish
+3. Launch **EVE Corp Manager** from your desktop or Start Menu
+4. Log in with your Director or CEO character via EVE SSO
+5. Data syncs automatically — no terminal, no browser, no setup
+
+> **First launch:** The app creates its config and database automatically in `%AppData%\eve-corp-manager\`. Nothing is written to the install folder.
 
 ---
 
-## Step 3: Configure the app
+## Features
 
-Copy `.env.example` to `.env`:
-```
-copy .env.example .env
-```
-
-Open `.env` in Notepad and fill in:
-```
-EVE_CLIENT_ID=your_client_id_from_step_2
-EVE_CLIENT_SECRET=your_secret_from_step_2
-EVE_CALLBACK_URL=http://localhost:3000/auth/callback
-SESSION_SECRET=pick_any_long_random_string_here
-PORT=3000
-```
+| Tab | What it shows |
+|-----|---------------|
+| **Overview** | KPI summary — wallet, fuel status, recent kills, top taxpayers |
+| **Structures** | Fuel days remaining, gas stock, alerts for low fuel/gas |
+| **Metenox** | Moon drill profitability vs live Jita prices, manual material entry |
+| **Wallet & Tax** | Corp wallet journal, taxpayer leaderboard (alt-aggregated) |
+| **Mining** | Mining ledger by member/main, monthly totals |
+| **Corp Kills** | Kill rankings (rolling 30-day + monthly), ISK destroyed |
+| **Settings** | Sync status, email notifications, alt→main mappings |
 
 ---
 
-## Step 4: Install dependencies & start
-
-Open Command Prompt, navigate to this folder, then run:
-```
-cd G:\Thumbnails\EVE\eve-app
-npm install
-npm start
-```
-
-Open your browser and go to: **http://localhost:3000**
-
-Click **Login with EVE Online**, log in with your Director/CEO character — the app will start pulling data immediately.
-
----
-
-## Running in the future
-
-Every time you want to use the dashboard:
-```
-cd G:\Thumbnails\EVE\eve-app
-npm start
-```
-Then open http://localhost:3000. The app remembers your login and syncs automatically.
-
-For development with auto-restart on file changes:
-```
-npm run dev
-```
-
----
-
-## What gets synced automatically
+## What syncs automatically
 
 | Data | Frequency |
 |------|-----------|
-| Structure fuel | Every hour |
+| Structures & fuel | Every hour |
 | Corp wallet | Every hour |
-| Market prices (Jita) | Every 5 minutes |
-| Corp assets | Every hour |
+| Corp assets (gas/fuel stock) | Every hour |
+| Member tracking | Every hour |
+| Mining ledger | Every hour |
+| Corp kills | Every hour |
+| Jita market prices | Every 5 minutes |
 | Email alert check | Daily 08:00 UTC |
 | Monthly snapshot | 1st of each month |
 
-You can also trigger **Sync Now** from the header button or the Settings tab.
+**Sync Now** is also available from the Settings tab or the tray icon right-click menu.
+
+---
+
+## Closing the App
+
+- **Log Off Only** — closes the window, keeps the server running in the background (syncs continue). Re-open via the tray icon.
+- **Shut Down** — stops everything completely. Access via the Logout button in the top-right.
+- **X button** — shuts down completely (same as Shut Down).
+
+---
+
+## EVE SSO Scopes Required
+
+When registering your application at https://developers.eveonline.com/applications, add these scopes:
+
+- `esi-wallet.read_corporation_wallets.v1`
+- `esi-corporations.read_structures.v1`
+- `esi-corporations.read_corporation_membership.v1`
+- `esi-corporations.track_members.v1`
+- `esi-industry.read_corporation_mining.v1`
+- `esi-assets.read_corporation_assets.v1`
+
+Callback URL: `http://localhost:3000/auth/callback`
 
 ---
 
 ## Email Notifications (optional)
 
-Configure in the **Settings** tab under "Email Notifications":
-- Enter your SMTP server details (Gmail, Outlook, etc.)
-- For Gmail: use an **App Password** (not your regular password) — see https://support.google.com/accounts/answer/185833
-- Set your alert thresholds for fuel and magmatic gas
-- Click **Send Test Email** to verify it works
+Configure in **Settings → Email Notifications**:
+- Enter SMTP server, port, username, password
+- For Gmail: use an [App Password](https://support.google.com/accounts/answer/185833), not your regular password
+- Set fuel and gas alert thresholds
+- Click **Send Test Email** to verify
+
+> **Security:** Your SMTP password is encrypted at rest using Windows DPAPI (tied to your Windows user account). It is never stored in plaintext.
 
 ---
 
-## Magmatic Gas Tracking
+## Alt → Main Mapping
 
-ESI does not expose magmatic gas levels. In the **Structures** tab, click **💨 Gas** next to any Metenox to enter:
-- **Last refill date** — when you last added gas
-- **Quantity added** — how many units you put in
-- **Daily consumption** — defaults to 4,800/day (standard Metenox rate)
-
-The app calculates estimated days remaining and will alert you when it drops below your threshold.
+Aggregate kills, mining, and tax by main character:
+- **Settings tab → Import CSV** — one `AltName,MainName` pair per line
+- Or run `python scripts\import_alts.py` to import from Corp Management.xlsx
 
 ---
 
 ## Data Location
 
-All data is stored locally in `data/corp.db` (SQLite). No data is sent anywhere except to ESI (esi.evetech.net) and your SMTP server (if configured).
+All data is stored in `%AppData%\eve-corp-manager\corp.db` (SQLite). Uninstalling the app does **not** delete this folder — your data is preserved across updates.
+
+---
+
+## For Developers — Running from Source
+
+### Prerequisites
+- Node.js v22+ — https://nodejs.org
+- Git
+
+### Setup
+```bash
+git clone <repo-url>
+cd eve-app
+npm install
+```
+
+Create a `.env` file:
+```
+EVE_CLIENT_ID=your_client_id
+EVE_CLIENT_SECRET=your_secret
+EVE_CALLBACK_URL=http://localhost:3000/auth/callback
+SESSION_SECRET=any_long_random_string
+```
+
+### Run in Electron (dev mode)
+```bash
+npm run electron
+```
+This opens the full app window. Right-click → Inspect for DevTools.
+
+### Build Windows installer
+```bash
+npm run dist
+```
+Output: `dist/EVE-Corp-Manager-Setup-x.x.x.exe`
+
+> **Note:** After `npm run dist`, `better-sqlite3` is compiled for Electron's Node.js. Use `npm run electron` for dev — do not use `npm start` (system Node.js version mismatch).

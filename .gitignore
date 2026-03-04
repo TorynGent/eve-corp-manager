@@ -6,6 +6,9 @@ node_modules/
 
 # SQLite database — contains corp data, not for version control
 data/
+*.db
+*.db-wal
+*.db-shm
 
 # Electron build output
 dist/

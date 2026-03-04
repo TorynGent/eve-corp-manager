@@ -428,18 +428,20 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
-<script src="/js/api.js"></script>
-<script src="/js/charts.js"></script>
-<script src="/js/dashboard.js"></script>
-<script src="/js/structures.js"></script>
-<script src="/js/metenox.js"></script>
-<script src="/js/wallet.js"></script>
-<script src="/js/inventory.js"></script>
-<script src="/js/mining.js"></script>
-<script src="/js/kills.js"></script>
-<script src="/js/settings.js"></script>
-<script src="/js/app.js"></script>
+<!-- ── Location Rename Modal ──────────────────────────────────────────── -->
+<div id="loc-rename-modal" style="display:none;position:fixed;inset:0;background:rgba(4,8,16,.85);
+  align-items:center;justify-content:center;z-index:500">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:28px 32px;max-width:420px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.6)">
+    <div style="font-size:1rem;font-weight:700;margin-bottom:14px">Rename Location</div>
+    <input id="loc-rename-input" type="text" class="input" style="width:100%;margin-bottom:18px"
+      placeholder="Custom display name (blank = auto-resolved)">
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" id="loc-rename-cancel">Cancel</button>
+      <button class="btn btn-primary" id="loc-rename-save">Save</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── Logout Choice Modal ────────────────────────────────────────────── -->
 <div id="logout-modal" style="display:none;position:fixed;inset:0;background:rgba(4,8,16,.85);
@@ -458,5 +460,18 @@
     </div>
   </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/charts.js"></script>
+<script src="/js/dashboard.js"></script>
+<script src="/js/structures.js"></script>
+<script src="/js/metenox.js"></script>
+<script src="/js/wallet.js"></script>
+<script src="/js/inventory.js"></script>
+<script src="/js/mining.js"></script>
+<script src="/js/kills.js"></script>
+<script src="/js/settings.js"></script>
+<script src="/js/app.js"></script>
 </body>
 </html>

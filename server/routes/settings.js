@@ -3,6 +3,7 @@ const express = require('express');
 const router  = express.Router();
 const { requireAuth }  = require('../auth');
 const { db, getSetting, setSetting, getSyncStatus } = require('../db');
+const { encryptValue, decryptValue } = require('../secure-storage');
 
 // ── Alt → Main Mappings ────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ router.get('/notifications', requireAuth, (req, res) => {
     smtpHost:         getSetting('smtp_host', ''),
     smtpPort:         getSetting('smtp_port', '587'),
     smtpUser:         getSetting('smtp_user', ''),
-    smtpPass:         getSetting('smtp_pass', ''),  // returned but masked in UI
+    smtpPassSet:      !!getSetting('smtp_pass', ''),  // never send password to browser
     smtpFrom:         getSetting('smtp_from', ''),
     smtpTls:          getSetting('smtp_tls', 'true'),
     recipients:       getSetting('recipients', ''),
@@ -70,7 +71,7 @@ router.put('/notifications', requireAuth, (req, res) => {
     'gas_threshold_days':   req.body.gasThresholdDays,
     'notifications_enabled': req.body.enabled,
   };
-  if (req.body.smtpPass) fields['smtp_pass'] = req.body.smtpPass;
+  if (req.body.smtpPass) fields['smtp_pass'] = encryptValue(req.body.smtpPass);
 
   for (const [k, v] of Object.entries(fields)) {
     if (v !== undefined && v !== null) setSetting(k, v);
