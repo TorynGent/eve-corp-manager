@@ -14,6 +14,8 @@ A private, local-only corporation management dashboard for EVE Online. All data 
 
 > **First launch:** The app creates its config and database automatically in `%AppData%\eve-corp-manager\`. Nothing is written to the install folder.
 
+> **Antivirus / Windows Defender may flag the installer or EXE** — Some antivirus software will report the installer or the app as a potential threat (e.g. "Unknown publisher", "Heuristic" or "Generic" detection). **The program is safe.** It is open-source and does not contain malware. Common reasons for false positives: (1) the app is **not code-signed** (no paid certificate from a CA), so Windows and AV vendors treat it as "unknown"; (2) **Electron** apps bundle Node.js and native code, which can trigger heuristic scans; (3) new or rarely-downloaded executables often lack a "reputation" score. You can add an exclusion for the install folder or the downloaded installer, or choose "Run anyway" / "More info → Run anyway" when Windows warns. Builds are produced locally via `npm run dist`; the source is on GitHub for review.
+
 ---
 
 ## Features
