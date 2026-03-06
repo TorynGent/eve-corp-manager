@@ -1,6 +1,6 @@
 # EVE Corp Manager
 
-A private, local-only corporation management dashboard for EVE Online. All data stays on your machine — nothing is sent anywhere except to ESI (esi.evetech.net) and your SMTP server if you configure email alerts.
+A private, local-only corporation management dashboard for EVE Online. All data stays on your machine — nothing is sent anywhere except to ESI (esi.evetech.net), your SMTP server if you configure email alerts, and optionally a Discord webhook for structure alerts.
 
 ---
 
@@ -20,13 +20,26 @@ A private, local-only corporation management dashboard for EVE Online. All data 
 
 | Tab | What it shows |
 |-----|---------------|
-| **Overview** | KPI summary — wallet, fuel status, recent kills, top taxpayers |
-| **Structures** | Fuel days remaining, gas stock, alerts for low fuel/gas |
+| **Overview** | KPI summary — wallet, fuel status, recent kills, top taxpayers; dashboard load errors show a retry banner |
+| **Structures** | Fuel days remaining, gas stock, alerts for low fuel/gas; fuel overrides and manual gas data (Metenox); manual location names |
 | **Metenox** | Moon drill profitability vs live Jita prices, manual material entry |
-| **Wallet & Tax** | Corp wallet journal, taxpayer leaderboard (alt-aggregated) |
-| **Mining** | Mining ledger by member/main, monthly totals |
-| **Corp Kills** | Kill rankings (rolling 30-day + monthly), ISK destroyed |
-| **Settings** | Sync status, email notifications, alt→main mappings |
+| **Wallet & Tax** | Corp wallet journal (search + Enter), taxpayer leaderboard (alt-aggregated), CSV export |
+| **Mining** | Mining ledger by member/main, monthly totals, period presets (This month / Last month), CSV export |
+| **Corp Kills** | Kill rankings (rolling 30-day + monthly), ISK destroyed, period presets |
+| **Member Health** | PAP-style weights, fat-PAP overrides; responsive KPI grid |
+| **Settings** | Sync status, backup & restore, email & Discord notifications, **Display** (color-blind mode), corp rates, scratchpad, fuel hangar, alt→main mappings (at bottom) |
+
+**UX & accessibility**
+- **Color-blind friendly mode** — Settings → Display. Uses blue/orange/magenta palette for charts and indicators; applies to all built-in charts (kills, Metenox, dashboard).
+- **Keyboard** — Arrow Left/Right switch tabs (when not in an input); Escape closes modals (gas, Metenox manual materials).
+- **Toasts** — Success/error feedback via non-blocking toasts (bottom-right) instead of `alert()`; destructive actions still use confirm dialogs.
+- **API errors** — Server error messages are shown in the UI (not just "API 403"); dashboard and exports show retry or clear messages.
+- **Wallet journal** — Search button and “or press Enter” hint; journal loads on Enter.
+- **Responsive** — Member Health KPIs reflow to 2 columns (≤680px) and 1 column (≤480px).
+
+**Notifications**
+- **Email** — Optional SMTP config for fuel/gas structure alerts (daily digest at 08:00 UTC).
+- **Discord webhook** — Optional webhook URL; when set, the same fuel/gas alerts are posted to your Discord channel (or use Discord only without email). Test with **Send Test to Discord** in Settings.
 
 ---
 
@@ -58,7 +71,7 @@ A private, local-only corporation management dashboard for EVE Online. All data 
 
 ## EVE SSO Scopes Required
 
-When registering your application at https://developers.eveonline.com/applications, add these scopes:
+When registering your application at https://developers.eveonline.com/applications, choose **Native Application** (no client secret). Add these scopes:
 
 - `esi-wallet.read_corporation_wallets.v1`
 - `esi-corporations.read_structures.v1`
@@ -66,30 +79,51 @@ When registering your application at https://developers.eveonline.com/applicatio
 - `esi-corporations.track_members.v1`
 - `esi-industry.read_corporation_mining.v1`
 - `esi-assets.read_corporation_assets.v1`
+- `esi-universe.read_structures.v1`
 
 Callback URL: `http://localhost:3000/auth/callback`
 
 ---
 
-## Email Notifications (optional)
+## CSV exports
 
-Configure in **Settings → Email Notifications**:
+You can export data as CSV for use in spreadsheets or external reporting:
+
+- **Wallet & Tax tab** — **Export tax CSV**: tax summary by period (uses the same period as the “Tax Contributions by Group” selector). **Export CSV** next to Wallet Journal: journal entries (division 1) for the selected period and optional ref-type filter, up to 10,000 rows.
+- **Mining tab** — **Export CSV**: mining ledger for the selected period (main name, character name, type, quantity).
+
+Files download with sensible names (e.g. `wallet-journal-2026-03.csv`, `tax-summary-2026-03.csv`, `mining-ledger-2026-03.csv`).
+
+---
+
+## Email & Discord Notifications (optional)
+
+Structure alerts (low fuel blocks or low magmatic gas) can be sent by **email** and/or **Discord**. Configure in **Settings → Email & Discord Notifications**:
 - Enter SMTP server, port, username, password
 - For Gmail: use an [App Password](https://support.google.com/accounts/answer/185833), not your regular password
 - Set **Fuel Block Alert Threshold** (days) and **Magmatic Gas Alert Threshold** (days)
 - Enter **Recipients** (comma- or semicolon-separated email addresses)
-- Optionally set **From Address** (e.g. `EVE Corp Dashboard <noreply@example.com>`)
-- Click **Send Test Email** to verify
+- Optionally set **From Address** (e.g. `EVE Corp Dashboard <no-reply@example.com>`)
+- **Discord Webhook URL** (optional): create a webhook in Discord (Channel → Edit → Integrations → Webhooks). When set, fuel/gas alerts are also sent to that channel (or you can use Discord only and leave email blank).
+- Click **Send Test Email** or **Send Test to Discord** to verify
 
 **How it works**
 - The app runs an **alert check once per day at 08:00 UTC** (see “What syncs automatically”).
 - For each corp structure it compares **fuel days remaining** to your fuel threshold and **magmatic gas days** (Metenox only) to your gas threshold. If either is at or below the threshold, that structure is added to the day’s alert list.
-- All qualifying structures are sent in **one digest email** with a table: structure name, system, type (Fuel Blocks or Magmatic Gas), days left, and expiry date.
-- The same structure and alert type (fuel or gas) is **not re-sent within 24 hours** — so you get at most one email per structure per issue per day.
-- You can **turn notifications off** without clearing SMTP settings (Settings → Email Notifications).
+- All qualifying structures are sent in **one digest** (by email and/or Discord) with structure name, system, type (Fuel Blocks or Magmatic Gas), days left, and expiry date.
+- The same structure and alert type (fuel or gas) is **not re-sent within 24 hours** — so you get at most one alert per structure per issue per day.
+- You can **turn notifications off** without clearing SMTP or Discord settings.
 - Recent sent alerts appear under **Recent Alerts Sent** in the same panel.
 
-> **Security:** Your SMTP password is encrypted at rest using Windows DPAPI (tied to your Windows user account). It is never stored in plaintext.
+---
+
+## Security & data protection
+
+- **OAuth tokens** — Access and refresh tokens are encrypted at rest. In the packaged app, Electron safeStorage (e.g. Windows DPAPI) is used; when running from source with a proper `SESSION_SECRET`, tokens use AES-256-GCM with a key derived from the secret. A one-time migration on startup encrypts any existing plaintext tokens. Backups still contain the encrypted values — treat backup files as sensitive and store them securely.
+- **SMTP password** — Encrypted at rest (same mechanism as above); only a “password set” flag is sent to the UI.
+- **Session** — Session cookie uses `httpOnly`, `sameSite: 'lax'`, and `secure` in production. Login uses EVE SSO with PKCE (no client secret) and OAuth state for CSRF protection.
+- **Backup & restore** — Downloading a backup shows a warning that the file contains sensitive data (tokens, settings). Restore only accepts files that are valid SQLite databases (magic-bytes check).
+- **API** — All data-changing and data-reading routes require an authenticated session; SQL uses parameterized queries throughout.
 
 ---
 
@@ -103,7 +137,7 @@ Aggregate kills, mining, and tax by main character:
 
 ## Data Location
 
-All data is stored in `%AppData%\eve-corp-manager\corp.db` (SQLite). Uninstalling the app does **not** delete this folder — your data is preserved across updates.
+All data is stored in `%AppData%\eve-corp-manager\corp.db` (SQLite). OAuth tokens and SMTP password are stored encrypted in the database. Uninstalling the app does **not** delete this folder — your data is preserved across updates.
 
 ---
 
@@ -123,10 +157,11 @@ npm install
 Create a `.env` file:
 ```
 EVE_CLIENT_ID=your_client_id
-EVE_CLIENT_SECRET=your_secret
 EVE_CALLBACK_URL=http://localhost:3000/auth/callback
 SESSION_SECRET=any_long_random_string
 ```
+
+> Use **Native Application** in the EVE dev portal — no client secret. Keep `SESSION_SECRET` long and random (or let the packaged app generate it on first launch).
 
 ### Run in Electron (dev mode)
 ```bash
@@ -140,4 +175,27 @@ npm run dist
 ```
 Output: `dist/EVE-Corp-Manager-Setup-x.x.x.exe`
 
+### Security check (dependencies)
+```bash
+npm run security-check
+```
+Runs `npm audit`. Use `npm audit fix` (or `npm audit fix --force` after checking breaking changes) before releases.
+
 > **Note:** After `npm run dist`, `better-sqlite3` is compiled for Electron's Node.js. Use `npm run electron` for dev — do not use `npm start` (system Node.js version mismatch).
+
+---
+
+## Quick reference — maintainers
+
+| I want to… | Do this |
+|------------|--------|
+| **Run the app (dev)** | `npm run electron` |
+| **Run server only (no window)** | `npm start` |
+| **Build installer** | `npm run dist` |
+| **Check dependencies for vulnerabilities** | `npm run security-check` or `npm audit`; then `npm audit fix` (or `npm audit fix --force` if you accept breaking changes) |
+| **Remember security & data protection** | Open **`.claude/SECURITY-DATA-PROTECTION-AUDIT.md`** — checklist, regular cadence (Section 9), and what was implemented |
+| **Remember session/feature context** | Open **`.claude/SESSION-HANDOFF.md`** — what was built last session, design notes, key files |
+| **Backup data** | Settings → Backup & Restore → Download. File contains sensitive data (tokens, settings); store securely. |
+| **Restore data** | Settings → Backup & Restore → choose file → Upload. Restart the app to apply. |
+
+**Security habit:** Before each release, run `npm audit` and fix any reported issues. Every few months, skim the audit doc (Section 9).
