@@ -1,8 +1,11 @@
 'use strict';
 const express = require('express');
 const router  = express.Router();
+const path    = require('path');
+const fs      = require('fs');
+const multer  = require('multer');
 const { requireAuth }  = require('../auth');
-const { db, getSetting, setSetting, getSyncStatus } = require('../db');
+const { db, getSetting, setSetting, getSyncStatus, DB_PATH } = require('../db');
 const { encryptValue, decryptValue } = require('../secure-storage');
 
 // ── Alt → Main Mappings ────────────────────────────────────────────────────────
@@ -55,6 +58,7 @@ router.get('/notifications', requireAuth, (req, res) => {
     fuelThresholdDays: getSetting('fuel_threshold_days', '14'),
     gasThresholdDays:  getSetting('gas_threshold_days', '7'),
     enabled:           getSetting('notifications_enabled', 'true'),
+    discordWebhookUrl: getSetting('discord_webhook_url', ''),
   });
 });
 
@@ -70,6 +74,7 @@ router.put('/notifications', requireAuth, (req, res) => {
     'fuel_threshold_days':  req.body.fuelThresholdDays,
     'gas_threshold_days':   req.body.gasThresholdDays,
     'notifications_enabled': req.body.enabled,
+    'discord_webhook_url':  req.body.discordWebhookUrl,
   };
   if (req.body.smtpPass) fields['smtp_pass'] = encryptValue(req.body.smtpPass);
 
@@ -85,6 +90,17 @@ router.post('/notifications/test', requireAuth, async (req, res) => {
     const { sendTestEmail } = require('../notifications');
     await sendTestEmail();
     res.json({ ok: true, message: 'Test email sent successfully.' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /api/settings/notifications/test-discord — send a test message to Discord webhook
+router.post('/notifications/test-discord', requireAuth, async (req, res) => {
+  try {
+    const { sendTestDiscord } = require('../notifications');
+    await sendTestDiscord();
+    res.json({ ok: true, message: 'Test message sent to Discord.' });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -116,6 +132,82 @@ router.get('/sync-status', requireAuth, (req, res) => {
   res.json(status);
 });
 
+// GET /api/settings/sync-errors — list of { key, message, at } for display in "Last Sync Errors"
+router.get('/sync-errors', requireAuth, (req, res) => {
+  const keys = ['structures', 'wallet', 'assets', 'mining', 'observers', 'market_prices', 'members', 'kills'];
+  const errors = [];
+  for (const k of keys) {
+    const row = getSyncStatus(k);
+    if (row?.last_error) {
+      errors.push({
+        key: k,
+        message: row.last_error,
+        at: row.last_sync ? new Date(row.last_sync * 1000).toISOString() : null,
+      });
+    }
+  }
+  res.json(errors);
+});
+
+// GET /api/settings/backup — stream the database file for download
+router.get('/backup', requireAuth, (req, res) => {
+  if (!fs.existsSync(DB_PATH)) return res.status(404).json({ error: 'Database not found' });
+  const name = path.basename(DB_PATH);
+  res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+  const stream = fs.createReadStream(DB_PATH);
+  stream.pipe(res);
+});
+
+const uploadDir = path.join(path.dirname(DB_PATH), 'upload');
+const upload = multer({ dest: uploadDir, limits: { fileSize: 200 * 1024 * 1024 } });
+
+const SQLITE_MAGIC = Buffer.from('SQLite format 3\0', 'utf8');
+
+router.post('/restore', requireAuth, (req, res, next) => {
+  fs.mkdirSync(uploadDir, { recursive: true });
+  upload.single('file')(req, res, (err) => {
+    if (err) return next(err);
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const restorePath = DB_PATH + '.restore';
+    try {
+      const buf = fs.readFileSync(req.file.path, { start: 0, end: SQLITE_MAGIC.length });
+      if (!buf.equals(SQLITE_MAGIC)) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: 'Uploaded file is not a valid SQLite database' });
+      }
+      fs.copyFileSync(req.file.path, restorePath);
+      fs.unlinkSync(req.file.path);
+    } catch (e) {
+      try { fs.unlinkSync(req.file.path); } catch {}
+      return res.status(500).json({ error: e.message });
+    }
+    res.json({ ok: true, message: 'Backup saved. Restart the application to complete restore.' });
+  });
+});
+
+// GET /api/settings/corp-rates — ISK tax %, mining tax % (for wallet/mining display)
+router.get('/corp-rates', requireAuth, (req, res) => {
+  res.json({
+    taxRatePercent: getSetting('corp_tax_rate') != null && getSetting('corp_tax_rate') !== ''
+      ? parseFloat(getSetting('corp_tax_rate')) : null,
+    miningTaxRatePercent: getSetting('corp_mining_tax_rate') != null && getSetting('corp_mining_tax_rate') !== ''
+      ? parseFloat(getSetting('corp_mining_tax_rate')) : null,
+  });
+});
+
+// PUT /api/settings/corp-rates
+router.put('/corp-rates', requireAuth, (req, res) => {
+  const { taxRatePercent, miningTaxRatePercent } = req.body;
+  if (taxRatePercent !== undefined) {
+    setSetting('corp_tax_rate', (taxRatePercent === null || taxRatePercent === '') ? '' : String(Math.max(0, Math.min(100, parseFloat(taxRatePercent) || 0))));
+  }
+  if (miningTaxRatePercent !== undefined) {
+    setSetting('corp_mining_tax_rate', (miningTaxRatePercent === null || miningTaxRatePercent === '') ? '' : String(Math.max(0, Math.min(100, parseFloat(miningTaxRatePercent) || 0))));
+  }
+  res.json({ ok: true });
+});
+
 // POST /api/settings/sync-now — trigger a manual full sync
 router.post('/sync-now', requireAuth, async (req, res) => {
   try {
@@ -145,15 +237,42 @@ router.put('/scratchpad', requireAuth, (req, res) => {
 
 // GET /api/settings/fuel-hangar
 router.get('/fuel-hangar', requireAuth, (req, res) => {
-  res.json({ fuelHangar: getSetting('fuel_hangar', 'CorpSAG3') });
+  res.json({
+    fuelHangar: getSetting('fuel_hangar', 'CorpSAG3'),
+    gasConsumptionPerMonth: getSetting('gas_consumption_per_month', '144000'),
+  });
 });
 
 // PUT /api/settings/fuel-hangar
 router.put('/fuel-hangar', requireAuth, (req, res) => {
-  const { fuelHangar } = req.body;
+  const { fuelHangar, gasConsumptionPerMonth } = req.body;
   const valid = ['CorpSAG1','CorpSAG2','CorpSAG3','CorpSAG4','CorpSAG5','CorpSAG6','CorpSAG7'];
-  if (!valid.includes(fuelHangar)) return res.status(400).json({ error: 'Invalid hangar' });
-  setSetting('fuel_hangar', fuelHangar);
+  if (fuelHangar !== undefined) {
+    if (!valid.includes(fuelHangar)) return res.status(400).json({ error: 'Invalid hangar' });
+    setSetting('fuel_hangar', fuelHangar);
+  }
+  if (gasConsumptionPerMonth !== undefined) {
+    const n = parseInt(String(gasConsumptionPerMonth), 10);
+    if (isNaN(n) || n < 1) return res.status(400).json({ error: 'Gas consumption per month must be a positive number' });
+    setSetting('gas_consumption_per_month', String(n));
+  }
+  res.json({ ok: true });
+});
+
+// ── Display (e.g. color blind mode) ────────────────────────────────────────────
+
+// GET /api/settings/display
+router.get('/display', requireAuth, (req, res) => {
+  res.json({
+    colorBlindMode: getSetting('color_blind_mode', 'false') === 'true',
+  });
+});
+
+// PUT /api/settings/display
+router.put('/display', requireAuth, (req, res) => {
+  if (req.body.colorBlindMode !== undefined) {
+    setSetting('color_blind_mode', req.body.colorBlindMode ? 'true' : 'false');
+  }
   res.json({ ok: true });
 });
 

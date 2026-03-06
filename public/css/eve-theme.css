@@ -94,6 +94,7 @@ header {
 nav {
   display: flex; gap: 2px; padding: 0 24px;
   background: var(--surface); border-bottom: 1px solid var(--border);
+  position: sticky; top: 56px; z-index: 99;
 }
 .nav-tab {
   padding: 10px 18px; font-size: 0.78rem; font-weight: 600; cursor: pointer;
@@ -122,6 +123,7 @@ main { padding: 24px; flex: 1; max-width: 1600px; width: 100%; margin: 0 auto; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr;         gap: 16px; margin-bottom: 20px; }
 .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr;     gap: 16px; margin-bottom: 20px; }
 .grid-2-1 { display: grid; grid-template-columns: 2fr 1fr;       gap: 16px; margin-bottom: 20px; }
+.health-kpis-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 20px; }
 .mb-20 { margin-bottom: 20px; }
 
 /* ── KPI Tiles ────────────────────────────────────────────────────────── */
@@ -244,6 +246,10 @@ canvas { max-height: 280px; }
   .grid-4, .grid-2, .grid-3 { grid-template-columns: 1fr; }
   main { padding: 16px; }
   nav  { padding: 0 12px; overflow-x: auto; }
+  .health-kpis-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .health-kpis-grid { grid-template-columns: 1fr; }
 }
 
 /* ── Footer ───────────────────────────────────────────────────────────── */
@@ -251,3 +257,31 @@ footer {
   text-align: center; font-size: 0.68rem; color: var(--text-dim);
   padding: 12px 24px; border-top: 1px solid var(--border);
 }
+
+#toast-container {
+  position: fixed; bottom: 20px; right: 20px; z-index: 10000;
+  display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+  max-width: min(400px, calc(100vw - 40px));
+}
+.toast {
+  pointer-events: auto;
+  padding: 12px 16px; border-radius: 8px; font-size: 0.85rem; font-weight: 500;
+  box-shadow: 0 4px 20px rgba(0,0,0,.4);
+  animation: toast-in 0.25s ease;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.toast-success { background: rgba(0,212,170,.95); color: #001a14; border: 1px solid rgba(0,212,170,.6); }
+.toast-error   { background: rgba(255,85,85,.95);  color: #fff;   border: 1px solid rgba(255,85,85,.6); }
+.toast-info    { background: rgba(74,158,255,.95); color: #fff;   border: 1px solid rgba(74,158,255,.6); }
+
+/* ── Color blind friendly mode (deuteranopia/protanopia) ─────────────────────── */
+#app.color-blind-mode {
+  --green:  #2b9eed;
+  --red:    #e040a0;
+  --orange: #f0a030;
+}
+#app.color-blind-mode .toast-success { background: rgba(43,158,237,.95); color: #fff; border-color: rgba(43,158,237,.6); }
+#app.color-blind-mode .toast-error   { background: rgba(224,64,160,.95); color: #fff; border-color: rgba(224,64,160,.6); }

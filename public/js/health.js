@@ -54,7 +54,10 @@ function renderHealthKpis(s, thresholds) {
 
 function renderHealthTable(data) {
   const tbody   = document.getElementById('health-tbody');
-  let members   = [...data.members];
+  let members   = [...(data.members || [])];
+
+  const search = (document.getElementById('health-search')?.value || '').trim().toLowerCase();
+  if (search) members = members.filter(m => (m.mainName || '').toLowerCase().includes(search));
 
   // Sort
   const { col, dir } = _healthSort;
@@ -214,5 +217,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (_healthData) renderHealthTable(_healthData);
     });
+  });
+  document.getElementById('health-search')?.addEventListener('input', () => {
+    if (_healthData) renderHealthTable(_healthData);
   });
 });

@@ -2,8 +2,9 @@
 const express = require('express');
 const router  = express.Router();
 const { requireAuth } = require('../auth');
-const { db, getSetting } = require('../db');
+const { db, getSetting, setSetting } = require('../db');
 const { resolveStructureName } = require('../esi');
+const { computeStructureFuel } = require('../structure-fuel-data');
 
 const METENOX_TYPE_ID  = 81826;
 
@@ -15,6 +16,7 @@ const METENOX_TYPE_ID  = 81826;
 // GET /api/structures — return all synced structures with fuel/gas calculations
 router.get('/', requireAuth, (req, res) => {
   const structures = db.prepare('SELECT * FROM structures ORDER BY name').all();
+  const gasConsumptionPerMonth = parseInt(getSetting('gas_consumption_per_month', '144000'), 10) || 144000;
 
   const result = structures.map(s => {
     // Fuel block days remaining
@@ -51,6 +53,14 @@ router.get('/', requireAuth, (req, res) => {
       }
     }
 
+    const services = tryParse(s.services);
+    const { fuelPerHour: computedFuelPerHour, fuelPerMonth: computedFuelPerMonth } = computeStructureFuel(services, s.type_id);
+    const overrideKey = `structure_fuel_override_${s.structure_id}`;
+    const overrideRaw = getSetting(overrideKey);
+    const hasOverride = overrideRaw != null && String(overrideRaw).trim() !== '';
+    const fuelPerMonth = hasOverride ? Math.max(0, parseInt(overrideRaw, 10) || 0) : computedFuelPerMonth;
+    const fuelPerHour = hasOverride ? Math.round(fuelPerMonth / 720) : computedFuelPerHour;
+
     return {
       structureId:  s.structure_id,
       name:         s.name,
@@ -58,16 +68,19 @@ router.get('/', requireAuth, (req, res) => {
       typeName:     s.type_name,
       systemName:   s.system_name,
       state:        s.state,
-      services:     tryParse(s.services),
+      services,
       fuelExpires:  s.fuel_expires,
       fuelDaysLeft: fuelDaysLeft !== null ? parseFloat(fuelDaysLeft.toFixed(1)) : null,
+      fuelPerHour,
+      fuelPerMonth,
+      fuelOverride: hasOverride,
       isMetenox,
       gas,
       syncedAt:     s.synced_at,
     };
   });
 
-  res.json(result);
+  res.json({ structures: result, gasConsumptionPerMonth });
 });
 
 // GET /api/structures/expiries — items expiring within 30 days, sorted soonest first
@@ -118,6 +131,20 @@ router.get('/expiries', requireAuth, (req, res) => {
   res.json(items);
 });
 
+// PUT /api/structures/:id/fuel-override — set or clear manual fuel/mo for a structure (null/empty = use automatic)
+router.put('/:id/fuel-override', requireAuth, (req, res) => {
+  const structureId = req.params.id;
+  const key = `structure_fuel_override_${structureId}`;
+  const { fuelPerMonth } = req.body;
+  if (fuelPerMonth === null || fuelPerMonth === undefined || String(fuelPerMonth).trim() === '') {
+    db.prepare('DELETE FROM notification_settings WHERE key = ?').run(key);
+    return res.json({ ok: true, fuelPerMonth: null });
+  }
+  const value = Math.max(0, parseInt(fuelPerMonth, 10) || 0);
+  setSetting(key, String(value));
+  res.json({ ok: true, fuelPerMonth: value });
+});
+
 // PUT /api/structures/:id/gas — update manual gas data
 router.put('/:id/gas', requireAuth, (req, res) => {
   const structureId = parseInt(req.params.id, 10);
@@ -141,7 +168,22 @@ router.get('/inventory', requireAuth, async (req, res) => {
   const FUEL_IDS        = [4051, 4246, 4247, 4312]; // Caldari/Gallente/Amarr/Minmatar Fuel Blocks
   const GAS_TYPE_ID     = 81143; // Magmatic Gas
   const metenoxCount    = db.prepare('SELECT COUNT(*) AS c FROM structures WHERE type_id = ?').get(METENOX_TYPE_ID).c;
-  const structureCount  = db.prepare('SELECT COUNT(*) AS c FROM structures').get().c;
+  const structureRows   = db.prepare('SELECT structure_id, type_id, services FROM structures').all();
+  const gasConsumptionPerMonth = parseInt(getSetting('gas_consumption_per_month', '144000'), 10) || 144000;
+  const gasConsumPerHour = metenoxCount * (gasConsumptionPerMonth / 720);
+  const totalFuelPerHour = structureRows.reduce((sum, row) => {
+    const overrideKey = `structure_fuel_override_${row.structure_id}`;
+    const overrideRaw = getSetting(overrideKey);
+    const hasOverride = overrideRaw != null && String(overrideRaw).trim() !== '';
+    if (hasOverride) {
+      const fuelPerMonth = Math.max(0, parseInt(overrideRaw, 10) || 0);
+      return sum + Math.round(fuelPerMonth / 720);
+    }
+    const services = tryParse(row.services);
+    const { fuelPerHour } = computeStructureFuel(services, row.type_id);
+    return sum + fuelPerHour;
+  }, 0);
+  const structureCount  = structureRows.length;
 
   // Build a JS-side lookup map for structure names.
   // We avoid a SQL JOIN here because location_id in the assets table was added via ALTER TABLE
@@ -234,7 +276,6 @@ router.get('/inventory', requireAuth, async (req, res) => {
     .sort((a, b) => a.system_name.localeCompare(b.system_name) || a.structure_name.localeCompare(b.structure_name));
 
   const totalGas         = gasRows.reduce((s, r) => s + r.qty, 0);
-  const gasConsumPerHour = 200 * metenoxCount;
   const gasHoursLeft     = gasConsumPerHour > 0 && totalGas > 0 ? totalGas / gasConsumPerHour : null;
 
   const fuelRows = fuelRaw
@@ -248,7 +289,7 @@ router.get('/inventory', requireAuth, async (req, res) => {
     .sort((a, b) => a.system_name.localeCompare(b.system_name) || a.structure_name.localeCompare(b.structure_name) || a.type_name.localeCompare(b.type_name));
 
   const totalFuel         = fuelRows.reduce((s, r) => s + r.qty, 0);
-  const fuelConsumPerHour = 5 * structureCount;
+  const fuelConsumPerHour = totalFuelPerHour;
   const fuelHoursLeft     = fuelConsumPerHour > 0 && totalFuel > 0 ? totalFuel / fuelConsumPerHour : null;
 
   res.json({
@@ -257,6 +298,7 @@ router.get('/inventory', requireAuth, async (req, res) => {
       rows:              gasRows,
       total:             totalGas,
       metenoxCount,
+      consumptionPerMonth: gasConsumptionPerMonth,
       consumptionPerHour: gasConsumPerHour,
       hoursLeft:         gasHoursLeft ? Math.round(gasHoursLeft) : null,
       daysLeft:          gasHoursLeft ? parseFloat((gasHoursLeft / 24).toFixed(1)) : null,

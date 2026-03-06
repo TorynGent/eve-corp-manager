@@ -1,4 +1,6 @@
 async function loadDashboard() {
+  const errEl = document.getElementById('dashboard-error');
+  if (errEl) { errEl.style.display = 'none'; errEl.innerHTML = ''; }
   try {
     const [summary, snapshots, taxpayers, kills, scratchpad, expiries, dividends] = await Promise.all([
       api.get('/api/summary'),
@@ -18,14 +20,15 @@ async function loadDashboard() {
     document.getElementById('kpi-members-sub').textContent = `of ${summary.totalMembers} total`;
     document.getElementById('kpi-metenox-sub').textContent = `${summary.structureCount} structures total`;
 
-    // History line chart
+    // History line chart (use theme colors for color-blind mode)
     if (snapshots.length >= 2) {
+      const theme = getThemeColors();
       const labels  = snapshots.map(s => s.month);
       makeLineChart('chart-history', labels, [
         { label: 'Wallet Balance', data: snapshots.map(s => s.wallet_balance),
-          borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: 0.3 },
+          borderColor: theme.blue, backgroundColor: themeColorWithAlpha(theme.blue, 0.1), fill: true, tension: 0.3 },
         { label: 'Corp Equity',   data: snapshots.map(s => s.corp_equity || 0),
-          borderColor: '#00d4aa', backgroundColor: 'rgba(0,212,170,.08)', fill: true, tension: 0.3 },
+          borderColor: theme.green, backgroundColor: themeColorWithAlpha(theme.green, 0.08), fill: true, tension: 0.3 },
       ]);
     } else {
       const histCard = document.getElementById('chart-history').closest('.card');
@@ -55,6 +58,18 @@ async function loadDashboard() {
 
   } catch (err) {
     console.error('Dashboard load error:', err);
+    const errEl = document.getElementById('dashboard-error');
+    if (errEl) {
+      errEl.innerHTML = `
+        <div class="alert alert-error" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <span>Could not load overview: ${esc(err.message)}</span>
+          <button type="button" class="btn btn-primary btn-small" id="dashboard-retry-btn">Retry</button>
+        </div>`;
+      errEl.style.display = 'block';
+      document.getElementById('dashboard-retry-btn')?.addEventListener('click', () => loadDashboard());
+    } else {
+      toast('Dashboard load failed: ' + err.message, 'error');
+    }
   }
 }
 

@@ -111,7 +111,8 @@ function renderMetenoxChart(data) {
   const structures = [...adjusted].sort((a, b) => b.monthlyProfit - a.monthlyProfit);
   const labels     = structures.map(s => s.systemName || s.name);
   const values     = structures.map(s => s.monthlyProfit || 0);
-  const colors     = values.map(v => v >= 0 ? '#00d4aa' : '#ff5555');
+  const theme      = getThemeColors();
+  const colors     = values.map(v => v >= 0 ? theme.green : theme.red);
 
   destroyChart('chart-metenox');
   charts['chart-metenox'] = new Chart(document.getElementById('chart-metenox'), {
@@ -217,7 +218,7 @@ async function addManualMaterialRow() {
   const qtyHour  = parseFloat(document.getElementById('manual-qty-day').value);
 
   if (!typeId || !typeName || isNaN(qtyHour) || qtyHour <= 0) {
-    alert('Please select a material and enter a quantity per hour > 0.');
+    toast('Please select a material and enter a quantity per hour > 0.', 'error');
     return;
   }
 
@@ -231,7 +232,7 @@ async function addManualMaterialRow() {
     sel.value = '';
     await refreshManualTable();
   } catch (err) {
-    alert('Error saving: ' + err.message);
+    toast('Error saving: ' + err.message, 'error');
   }
 }
 
@@ -241,11 +242,14 @@ async function deleteManualRow(typeId) {
     await api.del(`/api/metenox/manual/${modalStructureId}/${typeId}`);
     await refreshManualTable();
   } catch (err) {
-    alert('Error deleting: ' + err.message);
+    toast('Error deleting: ' + err.message, 'error');
   }
 }
 
-// Close modal when clicking backdrop
+// Close modal when clicking backdrop; Escape to close
 document.getElementById('metenox-manual-modal')?.addEventListener('click', e => {
   if (e.target === e.currentTarget) closeManualModal();
+});
+document.getElementById('metenox-manual-modal')?.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeManualModal(); e.preventDefault(); }
 });

@@ -26,6 +26,19 @@ function setupEnvironment() {
   //  • is per-user on multi-user machines
   process.env.DB_PATH = path.join(userData, 'corp.db');
 
+  // If a restore file was left by Settings → Restore, apply it before the server opens the DB
+  const dbPath = process.env.DB_PATH;
+  const restorePath = dbPath + '.restore';
+  if (fs.existsSync(restorePath)) {
+    try {
+      if (fs.existsSync(dbPath)) fs.renameSync(dbPath, dbPath + '.bak');
+      fs.renameSync(restorePath, dbPath);
+      console.log('[Electron] Restored database from backup; previous DB saved as corp.db.bak');
+    } catch (e) {
+      console.error('[Electron] Restore failed:', e.message);
+    }
+  }
+
   if (IS_DEV) {
     // Development: load .env from the project root as normal
     require('dotenv').config({ path: path.join(__dirname, '..', '.env') });

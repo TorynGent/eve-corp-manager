@@ -49,19 +49,22 @@ function armDelete(btn, id) {
 document.getElementById('btn-add-mapping').addEventListener('click', async () => {
   const alt  = document.getElementById('map-alt').value.trim();
   const main = document.getElementById('map-main').value.trim();
-  if (!alt || !main) { alert('Both fields are required.'); return; }
+  if (!alt || !main) { toast('Both fields are required.', 'error'); return; }
   try {
     await api.post('/api/settings/mappings', { characterName: alt, mainName: main });
     document.getElementById('map-alt').value = '';
     document.getElementById('map-main').value = '';
     loadMappings();
-  } catch (err) { alert('Error: ' + err.message); }
+  } catch (err) { toast('Error: ' + err.message, 'error'); }
 });
 
 // ── Sync Status ───────────────────────────────────────────────────────────────
 async function loadSyncStatus() {
   try {
-    const status = await api.get('/api/settings/sync-status');
+    const [status, errors] = await Promise.all([
+      api.get('/api/settings/sync-status'),
+      api.get('/api/settings/sync-errors'),
+    ]);
     const el = document.getElementById('sync-status-list');
     const labels = {
       structures: 'Structures', wallet: 'Wallet Journal',
@@ -80,6 +83,18 @@ async function loadSyncStatus() {
           <span class="dim" style="font-size:0.72rem">${v.lastError ? '⚠️ ' + v.lastError : ageStr}</span>
         </div>`;
     }).join('');
+
+    const errLog = document.getElementById('sync-error-log');
+    const errBody = document.getElementById('sync-error-log-body');
+    if (errLog && errBody) {
+      if (errors && errors.length > 0) {
+        errLog.style.display = 'block';
+        const labelMap = { structures: 'Structures', wallet: 'Wallet', assets: 'Assets', mining: 'Mining', observers: 'Observers', market_prices: 'Market prices', members: 'Members', kills: 'Kills' };
+        errBody.innerHTML = errors.map(e => `<div style="margin-bottom:6px"><strong>${labelMap[e.key] || e.key}</strong>: ${e.message}${e.at ? ` (${new Date(e.at).toLocaleString()})` : ''}</div>`).join('');
+      } else {
+        errLog.style.display = 'none';
+      }
+    }
   } catch (err) { console.error('Sync status error:', err); }
 }
 
@@ -90,7 +105,7 @@ document.getElementById('btn-full-sync').addEventListener('click', async () => {
     await api.post('/api/settings/sync-now');
     setTimeout(() => { loadSyncStatus(); btn.disabled = false; btn.textContent = '⟳ Full Sync Now'; }, 3000);
   } catch (err) {
-    alert('Sync error: ' + err.message);
+    toast('Sync error: ' + err.message, 'error');
     btn.disabled = false; btn.textContent = '⟳ Full Sync Now';
   }
 });
@@ -98,8 +113,8 @@ document.getElementById('btn-full-sync').addEventListener('click', async () => {
 document.getElementById('btn-manual-snapshot').addEventListener('click', async () => {
   try {
     await api.post('/api/snapshots/create');
-    alert('Snapshot created successfully!');
-  } catch (err) { alert('Snapshot error: ' + err.message); }
+    toast('Snapshot created successfully!', 'success');
+  } catch (err) { toast('Snapshot error: ' + err.message, 'error'); }
 });
 
 // ── Notification Settings ─────────────────────────────────────────────────────
@@ -112,6 +127,7 @@ async function loadNotificationSettings() {
     document.getElementById('smtp-from').value       = cfg.smtpFrom || '';
     document.getElementById('smtp-pass').placeholder = cfg.smtpPassSet ? '••••••••  (saved — leave blank to keep)' : 'Password';
     document.getElementById('smtp-recipients').value = cfg.recipients || '';
+    document.getElementById('discord-webhook-url').value = cfg.discordWebhookUrl || '';
     document.getElementById('fuel-threshold').value  = cfg.fuelThresholdDays || 14;
     document.getElementById('gas-threshold').value   = cfg.gasThresholdDays  || 7;
     document.getElementById('fuel-threshold-val').textContent = (cfg.fuelThresholdDays || 14) + ' days';
@@ -153,6 +169,7 @@ document.getElementById('btn-save-notif').addEventListener('click', async () => 
       recipients:       document.getElementById('smtp-recipients').value,
       fuelThresholdDays: document.getElementById('fuel-threshold').value,
       gasThresholdDays:  document.getElementById('gas-threshold').value,
+      discordWebhookUrl: document.getElementById('discord-webhook-url').value.trim(),
     };
     if (passEl.value) body.smtpPass = passEl.value;
     await api.put('/api/settings/notifications', body);
@@ -171,6 +188,20 @@ document.getElementById('btn-test-email').addEventListener('click', async () => 
     const res = await api.post('/api/settings/notifications/test');
     fb.innerHTML = res.ok
       ? '<div class="alert alert-ok">✅ Test email sent!</div>'
+      : `<div class="alert alert-error">Failed: ${res.error}</div>`;
+  } catch (err) {
+    fb.innerHTML = `<div class="alert alert-error">Error: ${err.message}</div>`;
+  }
+  setTimeout(() => { fb.innerHTML = ''; }, 5000);
+});
+
+document.getElementById('btn-test-discord').addEventListener('click', async () => {
+  const fb = document.getElementById('notif-feedback');
+  fb.innerHTML = '<div class="alert alert-info">Sending…</div>';
+  try {
+    const res = await api.post('/api/settings/notifications/test-discord');
+    fb.innerHTML = res.ok
+      ? '<div class="alert alert-ok">✅ Test message sent to Discord!</div>'
       : `<div class="alert alert-error">Failed: ${res.error}</div>`;
   } catch (err) {
     fb.innerHTML = `<div class="alert alert-error">Error: ${err.message}</div>`;
@@ -280,17 +311,22 @@ document.getElementById('btn-save-health-weights')?.addEventListener('click', as
 // ── Fuel Hangar ───────────────────────────────────────────────────────────────
 async function loadFuelHangar() {
   try {
-    const { fuelHangar } = await api.get('/api/settings/fuel-hangar');
+    const { fuelHangar, gasConsumptionPerMonth } = await api.get('/api/settings/fuel-hangar');
     const sel = document.getElementById('fuel-hangar-select');
     if (sel && fuelHangar) sel.value = fuelHangar;
+    const gasInput = document.getElementById('gas-consumption-per-month');
+    if (gasInput && gasConsumptionPerMonth != null) gasInput.value = gasConsumptionPerMonth;
   } catch (err) { console.error('Fuel hangar load error:', err); }
 }
 
 document.getElementById('btn-save-fuel-hangar')?.addEventListener('click', async () => {
   const fb  = document.getElementById('fuel-hangar-feedback');
   const sel = document.getElementById('fuel-hangar-select');
+  const gasInput = document.getElementById('gas-consumption-per-month');
   try {
-    await api.put('/api/settings/fuel-hangar', { fuelHangar: sel.value });
+    const body = { fuelHangar: sel.value };
+    if (gasInput && gasInput.value.trim() !== '') body.gasConsumptionPerMonth = parseInt(gasInput.value, 10);
+    await api.put('/api/settings/fuel-hangar', body);
     fb.innerHTML = '<span class="alert alert-ok" style="padding:2px 8px">Saved</span>';
     setTimeout(() => { fb.innerHTML = ''; }, 2500);
   } catch (err) {
@@ -298,10 +334,109 @@ document.getElementById('btn-save-fuel-hangar')?.addEventListener('click', async
   }
 });
 
+// ── Corp Tax & LP Rates ───────────────────────────────────────────────────────
+async function loadCorpRates() {
+  try {
+    const r = await api.get('/api/settings/corp-rates');
+    const taxEl = document.getElementById('corp-tax-rate');
+    const miningEl = document.getElementById('corp-mining-tax-rate');
+    if (taxEl) taxEl.value = r.taxRatePercent != null ? r.taxRatePercent : '';
+    if (miningEl) miningEl.value = r.miningTaxRatePercent != null ? r.miningTaxRatePercent : '';
+  } catch (err) { console.error('Corp rates load error:', err); }
+}
+
+document.getElementById('btn-save-corp-rates')?.addEventListener('click', async () => {
+  const fb = document.getElementById('corp-rates-feedback');
+  try {
+    const taxVal = document.getElementById('corp-tax-rate')?.value?.trim() ?? '';
+    const miningVal = document.getElementById('corp-mining-tax-rate')?.value?.trim() ?? '';
+    await api.put('/api/settings/corp-rates', {
+      taxRatePercent: taxVal === '' ? null : parseFloat(taxVal),
+      miningTaxRatePercent: miningVal === '' ? null : parseFloat(miningVal),
+    });
+    fb.innerHTML = '<span class="alert alert-ok" style="padding:2px 8px">Saved</span>';
+    setTimeout(() => { fb.innerHTML = ''; }, 2500);
+  } catch (err) {
+    fb.innerHTML = `<span class="alert alert-error" style="padding:2px 8px">${esc(err.message)}</span>`;
+  }
+});
+
+// ── Backup / Restore ──────────────────────────────────────────────────────────
+document.getElementById('btn-export-backup')?.addEventListener('click', async () => {
+  const fb = document.getElementById('backup-restore-feedback');
+  fb.textContent = 'Preparing download…';
+  try {
+    const res = await fetch('/api/settings/backup', { credentials: 'include' });
+    if (!res.ok) throw new Error(res.statusText);
+    const blob = await res.blob();
+    const name = res.headers.get('Content-Disposition')?.match(/filename="?([^";\n]+)"?/)?.[1] || 'corp.db';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    fb.textContent = 'Downloaded. File contains sensitive data — store securely.';
+    if (typeof toast === 'function') toast('Backup contains sensitive data (tokens, settings). Store securely.', 'info');
+    setTimeout(() => fb.textContent = '', 4000);
+  } catch (err) {
+    fb.textContent = 'Error: ' + err.message;
+    fb.style.color = 'var(--red)';
+  }
+});
+
+document.getElementById('btn-restore-backup')?.addEventListener('click', () => {
+  document.getElementById('restore-file-input').click();
+});
+
+document.getElementById('restore-file-input')?.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const fb = document.getElementById('backup-restore-feedback');
+  fb.textContent = 'Uploading…';
+  fb.style.color = '';
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/api/settings/restore', { method: 'POST', credentials: 'include', body: form });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    fb.textContent = data.message || 'Backup saved. Restart the app to complete restore.';
+    fb.style.color = 'var(--green)';
+  } catch (err) {
+    fb.textContent = 'Error: ' + err.message;
+    fb.style.color = 'var(--red)';
+  }
+  e.target.value = '';
+});
+
 function loadSettings() {
   loadMappings();
   loadSyncStatus();
+  loadDisplaySettings();
   loadHealthWeights();
   loadNotificationSettings();
   loadFuelHangar();
+  loadCorpRates();
 }
+
+// ── Display (color blind mode) ───────────────────────────────────────────────
+async function loadDisplaySettings() {
+  try {
+    const data = await api.get('/api/settings/display');
+    const cb = document.getElementById('color-blind-mode');
+    if (cb) cb.checked = !!data.colorBlindMode;
+    document.getElementById('app')?.classList.toggle('color-blind-mode', !!data.colorBlindMode);
+  } catch (err) { console.error('Display settings load error:', err); }
+}
+
+document.getElementById('color-blind-mode')?.addEventListener('change', async function () {
+  const enabled = this.checked;
+  const fb = document.getElementById('display-feedback');
+  try {
+    await api.put('/api/settings/display', { colorBlindMode: enabled });
+    document.getElementById('app')?.classList.toggle('color-blind-mode', enabled);
+    if (fb) { fb.textContent = 'Saved.'; fb.style.color = 'var(--green)'; setTimeout(() => { fb.textContent = ''; }, 2000); }
+  } catch (err) {
+    if (fb) { fb.textContent = 'Error: ' + err.message; fb.style.color = 'var(--red)'; }
+  }
+});

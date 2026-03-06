@@ -77,6 +77,7 @@
   <main>
     <!-- ─── OVERVIEW ─────────────────────────────── -->
     <div class="tab-panel active" id="tab-overview">
+      <div id="dashboard-error" style="display:none;margin-bottom:16px"></div>
       <div class="grid-4" id="kpi-tiles">
         <div class="card kpi" style="min-height:auto"><div class="label">Corp Wallet</div><div id="kpi-wallet-breakdown" style="font-size:0.82rem;margin-top:6px">—</div></div>
         <div class="card kpi"><div class="label">Corp Equity</div><div class="value" id="kpi-equity">—</div><div class="sub" id="kpi-equity-sub">from monthly snapshot</div></div>
@@ -151,12 +152,13 @@
                 <th class="text-right">Fuel Expires</th>
                 <th class="text-right">Fuel Days</th>
                 <th style="min-width:110px">Fuel Level</th>
+                <th class="text-right" title="From online service modules">Fuel/mo</th>
                 <th class="text-right">Gas Days</th>
                 <th style="min-width:110px">Gas Level</th>
                 <th>Actions</th>
               </tr>
             </thead>
-            <tbody id="structures-tbody"><tr><td colspan="9" class="loading"><span class="spinner"></span> Loading structures…</td></tr></tbody>
+            <tbody id="structures-tbody"><tr><td colspan="10" class="loading"><span class="spinner"></span> Loading structures…</td></tr></tbody>
             <tfoot id="structures-tfoot"></tfoot>
           </table>
         </div>
@@ -232,11 +234,17 @@
 
       <div class="grid-2 mb-20">
         <div class="card">
-          <div class="card-title">Tax Contributions by Group
-            <select id="wallet-period-select" style="margin-left:10px;width:auto;padding:3px 6px;font-size:0.72rem;display:inline-block">
-              <option value="">Last 30 days</option>
-            </select>
-          </div>
+        <div class="card-title">Tax Contributions by Group
+          <span class="period-presets" style="margin-left:8px">
+            <button type="button" class="btn btn-ghost btn-small period-preset" data-period="">Last 30 days</button>
+            <button type="button" class="btn btn-ghost btn-small period-preset" data-period="this">This month</button>
+            <button type="button" class="btn btn-ghost btn-small period-preset" data-period="last">Last month</button>
+          </span>
+          <select id="wallet-period-select" style="margin-left:10px;width:auto;padding:3px 6px;font-size:0.72rem;display:inline-block">
+            <option value="">Last 30 days</option>
+          </select>
+          <button type="button" class="btn btn-ghost btn-small" id="wallet-export-tax-csv" title="Export tax summary as CSV">Export tax CSV</button>
+        </div>
           <canvas id="chart-tax-donut"></canvas>
         </div>
         <div class="card">
@@ -247,12 +255,17 @@
 
       <div class="card mb-20">
         <div class="card-title">Top 5 Tax Contributors</div>
+        <div id="tax-rates-info" style="font-size:0.75rem;color:var(--text-dim);margin-bottom:10px"></div>
         <div id="top5-tax"></div>
       </div>
 
       <div class="card mb-20">
         <div class="card-title">Wallet Journal
-          <input type="text" id="journal-filter" placeholder="Filter by type…" style="margin-left:12px;width:160px;display:inline-block;padding:4px 8px;font-size:0.72rem">
+          <input type="text" id="journal-search" placeholder="Search name or ID…" style="margin-left:8px;width:140px;display:inline-block;padding:4px 8px;font-size:0.72rem" title="Filter by character/corp name or ID">
+          <button type="button" class="btn btn-ghost btn-small" id="journal-search-btn" title="Apply search">Search</button>
+          <span style="font-size:0.7rem;color:var(--text-dim);margin-left:4px">(or press Enter)</span>
+          <input type="text" id="journal-filter" placeholder="Filter by type…" style="margin-left:8px;width:140px;display:inline-block;padding:4px 8px;font-size:0.72rem">
+          <button type="button" class="btn btn-ghost btn-small" id="journal-export-csv" title="Export journal as CSV (uses current period and filter)">Export CSV</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -275,26 +288,51 @@
     <div class="tab-panel" id="tab-mining">
       <div class="card mb-20">
         <div class="card-title">Corp Mining Ledger
+          <span class="period-presets" style="margin-left:8px">
+            <button type="button" class="btn btn-ghost btn-small mining-period-preset" data-period="rolling30">Last 30 days</button>
+            <button type="button" class="btn btn-ghost btn-small mining-period-preset" data-period="this">This month</button>
+            <button type="button" class="btn btn-ghost btn-small mining-period-preset" data-period="last">Last month</button>
+            <button type="button" class="btn btn-ghost btn-small mining-period-preset" data-period="last3">Last 3 months</button>
+          </span>
           <select id="mining-period" style="margin-left:10px;width:auto;padding:3px 6px;font-size:0.72rem;display:inline-block"></select>
           <span id="mining-period-label" style="margin-left:10px;font-size:0.72rem;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400"></span>
           <span id="mining-miner-count" style="margin-left:auto;font-size:0.72rem;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400"></span>
+          <button type="button" class="btn btn-ghost btn-small" id="mining-export-csv" title="Export mining ledger as CSV">Export CSV</button>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr>
-              <th>Main (click to expand)</th>
-              <th class="text-right">Total Ore</th>
-              <th class="text-right">Est. Value (Jita Buy)</th>
-              <th style="min-width:120px">Share</th>
-              <th class="text-right">%</th>
-            </tr></thead>
-            <tbody id="mining-tbody"><tr><td colspan="5" class="loading"><span class="spinner"></span> Loading mining data…</td></tr></tbody>
-          </table>
+        <p style="font-size:0.7rem;color:var(--text-dim);margin-top:4px">Period dropdown includes <strong>Last 30 days</strong> and <strong>Last 3 months</strong> (latter aggregates three calendar months; with only one month of ESI data it may match this month).</p>
+        <input type="text" id="mining-search" placeholder="Search miner name…" style="margin-bottom:10px;width:200px;padding:4px 8px;font-size:0.72rem;display:block" title="Filter table by main name">
+        <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">
+          <div class="table-wrap" style="flex:1;min-width:280px">
+            <table>
+              <thead><tr>
+                <th>Main (click to expand)</th>
+                <th class="text-right">Total Ore</th>
+                <th class="text-right">Est. Value (Jita Buy)</th>
+                <th style="min-width:120px">Share</th>
+                <th class="text-right">%</th>
+              </tr></thead>
+              <tbody id="mining-tbody"><tr><td colspan="5" class="loading"><span class="spinner"></span> Loading mining data…</td></tr></tbody>
+            </table>
+          </div>
+          <div style="flex:0 0 280px;max-width:320px">
+            <div class="card-title" style="font-size:0.85rem;margin-bottom:8px">Share by main</div>
+            <canvas id="chart-mining-pie" style="max-height:260px"></canvas>
+          </div>
         </div>
       </div>
       <div class="card mb-20">
         <div class="card-title">Top 10 Miners by Value</div>
         <canvas id="chart-mining"></canvas>
+      </div>
+      <div class="card mb-20">
+        <div class="card-title">Mining by Ore Type</div>
+        <div id="mining-by-type-wrap"><p class="empty">Load mining data to see breakdown by type.</p></div>
+        <canvas id="chart-mining-by-type" style="max-height:280px"></canvas>
+      </div>
+      <div class="card mb-20" id="mining-expected-tax-card">
+        <div class="card-title">Expected Tax from Mining (sanity check)</div>
+        <p style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px">Moon/mining tax is a percentage of mined <strong>volume</strong>. Expected tax = X% of total volume (ISK below is that volume valued at Jita, for comparison with wallet).</p>
+        <div id="mining-expected-tax-content"><p class="dim">Set mining tax rate in Settings. Load mining data first.</p></div>
       </div>
     </div>
 
@@ -303,6 +341,11 @@
       <div class="grid-2 mb-20">
         <div class="card">
           <div class="card-title">Top 10 Killers
+            <span class="period-presets" style="margin-left:8px">
+              <button type="button" class="btn btn-ghost btn-small kills-period-preset" data-period="rolling30">Last 30 days</button>
+              <button type="button" class="btn btn-ghost btn-small kills-period-preset" data-period="this">This month</button>
+              <button type="button" class="btn btn-ghost btn-small kills-period-preset" data-period="last">Last month</button>
+            </span>
             <select id="kills-period" style="margin-left:10px;width:auto;padding:3px 6px;font-size:0.72rem;display:inline-block"></select>
             <span id="kills-period-label" style="margin-left:8px;font-size:0.72rem;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400"></span>
           </div>
@@ -312,6 +355,11 @@
           <div class="card-title">Kills Chart</div>
           <canvas id="chart-kills"></canvas>
         </div>
+      </div>
+      <div class="card mb-20">
+        <div class="card-title">Kill History — Total kills &amp; ISK destroyed per month</div>
+        <p style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px">One point per calendar month with recorded kills.</p>
+        <canvas id="chart-kills-history" style="max-height:280px"></canvas>
       </div>
       <div class="card mb-20">
         <div class="card-title">Recent Kills
@@ -332,7 +380,7 @@
 
     <!-- ─── MEMBER HEALTH ────────────────────────── -->
     <div class="tab-panel" id="tab-health">
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:20px" id="health-kpis">
+      <div class="health-kpis-grid" id="health-kpis">
         <div class="card kpi"><div class="label">⚡ Hardcore</div><div class="value" id="hkpi-hardcore" style="color:var(--purple)">—</div><div class="sub" id="hkpi-hardcore-sub">score ≥ 85</div></div>
         <div class="card kpi"><div class="label">Active</div><div class="value" id="hkpi-active" style="color:var(--green)">—</div><div class="sub" id="hkpi-active-sub">score ≥ 60</div></div>
         <div class="card kpi"><div class="label">At Risk</div><div class="value" id="hkpi-atrisk" style="color:var(--orange)">—</div><div class="sub" id="hkpi-atrisk-sub">score ≥ 30</div></div>
@@ -343,20 +391,21 @@
         <div class="card-title">Member Health Scores — Last 30 Days
           <span id="health-weights-label" style="font-size:0.7rem;color:var(--text-dim);margin-left:10px;font-weight:400;text-transform:none;letter-spacing:0"></span>
         </div>
+        <input type="text" id="health-search" placeholder="Search member name…" style="margin-bottom:10px;width:200px;padding:4px 8px;font-size:0.72rem;display:block" title="Filter table by main name">
         <div class="table-wrap">
           <table id="health-table">
             <thead>
               <tr>
-                <th class="sortable" data-sort="rank">#</th>
-                <th class="sortable" data-sort="mainName">Member</th>
-                <th class="sortable" data-sort="healthScore">Health</th>
-                <th class="sortable" data-sort="taxScore">Tax</th>
-                <th class="sortable" data-sort="miningScore">Mining</th>
-                <th class="sortable" data-sort="killScore">Kills</th>
-                <th class="sortable" data-sort="activityScore">Activity</th>
-                <th class="sortable" data-sort="fatPapScore" id="health-fatpap-header">FAT/PAP</th>
-                <th class="sortable" data-sort="daysSinceLogin">Last Login</th>
-                <th>Status</th>
+                <th class="sortable" data-sort="rank" title="Rank by health score">#</th>
+                <th class="sortable" data-sort="mainName" title="Main character (alts grouped)">Member</th>
+                <th class="sortable" data-sort="healthScore" title="Weighted composite: Tax + Mining + Kills + Activity + FAT/PAP (log-normalized per metric, then weighted).">Health</th>
+                <th class="sortable" data-sort="taxScore" title="Log-normalized score from ISK contributed via bounties, missions, industry tax, etc. (rolling 30d).">Tax</th>
+                <th class="sortable" data-sort="miningScore" title="Log-normalized score from mining value (quantity × Jita buy price) in last 30 days.">Mining</th>
+                <th class="sortable" data-sort="killScore" title="Log-normalized score from corp kill participation count (rolling 30d).">Kills</th>
+                <th class="sortable" data-sort="activityScore" title="Based on last login: 100 − (days since login × 100 / inactive threshold).">Activity</th>
+                <th class="sortable" data-sort="fatPapScore" id="health-fatpap-header" title="FAT/PAP points from FAT PAP Manager DB or manual override; log-normalized.">FAT/PAP</th>
+                <th class="sortable" data-sort="daysSinceLogin" title="Days since this main’s most recent character login.">Last Login</th>
+                <th title="Status from score vs thresholds (Hardcore / Active / At Risk / Inactive).">Status</th>
               </tr>
             </thead>
             <tbody id="health-tbody"><tr><td colspan="10" class="loading"><span class="spinner"></span> Loading…</td></tr></tbody>
@@ -369,41 +418,68 @@
 
     <!-- ─── SETTINGS ─────────────────────────────── -->
     <div class="tab-panel" id="tab-settings">
-      <div class="grid-2 mb-20">
-        <!-- Alt → Main Mappings -->
-        <div class="card">
-          <div class="card-title">Alt → Main Mappings</div>
-          <div class="form-row" style="margin-bottom:14px">
-            <div class="form-group"><label>Alt Character Name</label><input type="text" id="map-alt" placeholder="e.g. Flak Chirac"></div>
-            <div class="form-group"><label>Main Group Name</label><input type="text" id="map-main" placeholder="e.g. Cray"></div>
-            <div style="padding-top:20px"><button class="btn btn-primary btn-small" id="btn-add-mapping">Add</button></div>
-          </div>
-          <!-- CSV Import -->
-          <div style="margin-bottom:14px;padding:10px;background:rgba(74,158,255,.07);border-radius:6px;border:1px solid rgba(74,158,255,.2)">
-            <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px">
-              Import from CSV — one line per mapping: <code style="color:#4a9eff">AltName,MainName</code>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center">
-              <button class="btn btn-ghost btn-small" id="btn-csv-upload">📂 Import CSV</button>
-              <input type="file" id="csv-file-input" accept=".csv,.txt" style="display:none">
-              <span style="font-size:0.72rem;color:var(--text-dim)">or run <code style="color:#4a9eff">python scripts\import_alts.py</code> to import from Excel</span>
-            </div>
-            <div id="csv-feedback" style="margin-top:8px"></div>
-          </div>
-          <div class="table-wrap">
-            <table><thead><tr><th>Alt</th><th>→ Main</th><th></th></tr></thead>
-            <tbody id="mappings-tbody"><tr><td colspan="3" class="loading"><span class="spinner"></span></td></tr></tbody></table>
-          </div>
+      <!-- Display / Accessibility -->
+      <div class="card mb-20">
+        <div class="card-title">Display</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85rem">
+            <input type="checkbox" id="color-blind-mode" style="width:18px;height:18px;accent-color:var(--blue)">
+            <span>Color blind friendly mode</span>
+          </label>
+          <span id="display-feedback" style="font-size:0.75rem;color:var(--text-dim)"></span>
         </div>
+        <p style="font-size:0.72rem;color:var(--text-dim);margin-top:8px;line-height:1.4">Uses a blue / orange / magenta palette instead of green / red so status and amounts are easier to distinguish for deuteranopia and protanopia.</p>
+      </div>
 
+      <div class="grid-2 mb-20">
         <!-- Sync Status -->
         <div class="card">
           <div class="card-title">Sync Status</div>
           <div id="sync-status-list"></div>
+          <div id="sync-error-log" style="margin-top:14px;padding:10px;background:rgba(255,85,85,.08);border-radius:6px;border:1px solid rgba(255,85,85,.25);display:none">
+            <div style="font-size:0.75rem;font-weight:700;color:var(--red);margin-bottom:8px">Last Sync Errors</div>
+            <div id="sync-error-log-body" style="font-size:0.72rem;max-height:120px;overflow-y:auto"></div>
+          </div>
           <div style="margin-top:14px;display:flex;gap:10px">
             <button class="btn btn-primary btn-small" id="btn-full-sync">⟳ Full Sync Now</button>
             <button class="btn btn-ghost btn-small" id="btn-manual-snapshot">📸 Create Snapshot</button>
           </div>
+        </div>
+
+        <!-- Backup / Restore -->
+        <div class="card">
+          <div class="card-title">Backup &amp; Restore</div>
+          <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:14px;line-height:1.5">
+            Export a copy of your database for disaster recovery or to move to another machine. Restore replaces the current database — restart the app after restoring.
+          </p>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary btn-small" id="btn-export-backup">📦 Export Backup</button>
+            <button class="btn btn-ghost btn-small" id="btn-restore-backup">📥 Restore from Backup</button>
+            <input type="file" id="restore-file-input" accept=".db,.sqlite" style="display:none">
+            <span id="backup-restore-feedback" style="font-size:0.75rem"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Corporation Tax & LP Rates (optional — shown on Wallet tab) -->
+      <div class="card mb-20">
+        <div class="card-title">Corporation Tax Rates (optional)</div>
+        <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:14px;line-height:1.5">
+          If set, these are shown on the Wallet &amp; Tax tab. <strong>ISK tax</strong> = general corp tax on bounties, missions, etc. <strong>Mining tax</strong> = % of mined volume (used for &quot;Expected tax from mining&quot; on the Mining tab). ESI does not expose corp tax; enter values from in-game Corp Management → Settings.
+        </p>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div>
+            <label style="font-size:0.75rem">ISK tax rate %</label>
+            <input type="number" id="corp-tax-rate" min="0" max="100" step="0.1" placeholder="e.g. 10"
+                   style="width:80px;margin-left:8px;padding:4px 8px;font-size:0.85rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px">
+          </div>
+          <div>
+            <label style="font-size:0.75rem">Mining tax rate %</label>
+            <input type="number" id="corp-mining-tax-rate" min="0" max="100" step="0.1" placeholder="e.g. 10"
+                   style="width:80px;margin-left:8px;padding:4px 8px;font-size:0.85rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px">
+          </div>
+          <button class="btn btn-primary btn-small" id="btn-save-corp-rates">Save</button>
+          <span id="corp-rates-feedback" style="font-size:0.75rem"></span>
         </div>
       </div>
 
@@ -414,7 +490,7 @@
           Select the corp hangar (CorpSAG1–7) where your corp stores its fuel blocks and magmatic gas.
           This determines what appears in the Structures tab stock inventory.
         </p>
-        <div style="display:flex;align-items:center;gap:12px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
           <select id="fuel-hangar-select" class="form-select" style="width:160px">
             <option value="CorpSAG1">Hangar 1 (CorpSAG1)</option>
             <option value="CorpSAG2">Hangar 2 (CorpSAG2)</option>
@@ -426,6 +502,14 @@
           </select>
           <button class="btn btn-primary btn-small" id="btn-save-fuel-hangar">Save</button>
           <span id="fuel-hangar-feedback"></span>
+        </div>
+        <div style="padding-top:14px;border-top:1px solid var(--border)">
+          <label style="font-size:0.75rem">Gas consumption per month (units)</label>
+          <p style="font-size:0.72rem;color:var(--text-dim);margin-top:2px;margin-bottom:8px">Metenox magmatic gas usage per structure per month. Default 144000; change if CCP updates the rate.</p>
+          <div style="display:flex;align-items:center;gap:12px">
+            <input type="number" id="gas-consumption-per-month" min="1" step="1000" value="144000"
+                   style="width:120px;padding:6px 8px;font-size:0.85rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px">
+          </div>
         </div>
       </div>
 
@@ -514,7 +598,7 @@
 
       <!-- Notifications -->
       <div class="card mb-20">
-        <div class="card-title">Email Notifications</div>
+        <div class="card-title">Email &amp; Discord Notifications</div>
         <div class="grid-2" style="gap:20px">
           <div>
             <div class="form-group" style="margin-bottom:10px"><label>SMTP Host</label><input type="text" id="smtp-host" placeholder="smtp.gmail.com"></div>
@@ -525,6 +609,11 @@
             <div class="form-group" style="margin-top:10px"><label>Password / App Password</label><input type="password" id="smtp-pass" placeholder="(unchanged)"></div>
             <div class="form-group" style="margin-top:10px"><label>From Address</label><input type="text" id="smtp-from" placeholder="EVE Corp Dashboard <no-reply@example.com>"></div>
             <div class="form-group" style="margin-top:10px"><label>Recipients (comma-separated)</label><input type="text" id="smtp-recipients" placeholder="you@example.com, fleetcommander@example.com"></div>
+            <div class="form-group" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+              <label>Discord Webhook URL</label>
+              <input type="url" id="discord-webhook-url" placeholder="https://discord.com/api/webhooks/…" style="width:100%;margin-top:6px;padding:6px 8px;font-size:0.82rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px">
+              <p style="font-size:0.72rem;color:var(--text-dim);margin-top:6px;line-height:1.4">Optional. Fuel/gas alerts are also sent here when set. Create a webhook in Discord: Channel → Edit → Integrations → Webhooks.</p>
+            </div>
           </div>
           <div>
             <div style="margin-bottom:16px">
@@ -541,9 +630,10 @@
                 <span class="range-val" id="gas-threshold-val">7 days</span>
               </div>
             </div>
-            <div style="display:flex;gap:10px;margin-top:20px">
+            <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
               <button class="btn btn-primary btn-small" id="btn-save-notif">Save</button>
               <button class="btn btn-ghost btn-small" id="btn-test-email">Send Test Email</button>
+              <button class="btn btn-ghost btn-small" id="btn-test-discord">Send Test to Discord</button>
             </div>
             <div id="notif-feedback" style="margin-top:10px"></div>
           </div>
@@ -554,10 +644,36 @@
           <div id="notif-log"></div>
         </div>
       </div>
+
+      <!-- Alt → Main Mappings (at bottom so a long list doesn't push other settings down) -->
+      <div class="card mb-20">
+        <div class="card-title">Alt → Main Mappings</div>
+        <div class="form-row" style="margin-bottom:14px">
+          <div class="form-group"><label>Alt Character Name</label><input type="text" id="map-alt" placeholder="e.g. Flak Chirac"></div>
+          <div class="form-group"><label>Main Group Name</label><input type="text" id="map-main" placeholder="e.g. Cray"></div>
+          <div style="padding-top:20px"><button class="btn btn-primary btn-small" id="btn-add-mapping">Add</button></div>
+        </div>
+        <div style="margin-bottom:14px;padding:10px;background:rgba(74,158,255,.07);border-radius:6px;border:1px solid rgba(74,158,255,.2)">
+          <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px">
+            Import from CSV — one line per mapping: <code style="color:#4a9eff">AltName,MainName</code>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-ghost btn-small" id="btn-csv-upload">📂 Import CSV</button>
+            <input type="file" id="csv-file-input" accept=".csv,.txt" style="display:none">
+            <span style="font-size:0.72rem;color:var(--text-dim)">or run <code style="color:#4a9eff">python scripts\import_alts.py</code> to import from Excel</span>
+          </div>
+          <div id="csv-feedback" style="margin-top:8px"></div>
+        </div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Alt</th><th>→ Main</th><th></th></tr></thead>
+          <tbody id="mappings-tbody"><tr><td colspan="3" class="loading"><span class="spinner"></span></td></tr></tbody></table>
+        </div>
+      </div>
     </div>
   </main>
 
   <footer>EVE Corp Dashboard · ESI-powered · Data updates hourly &nbsp;·&nbsp; App by <a href="https://github.com/TorynGent" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none;">Cray Rayner / Toryn Gent</a></footer>
+  <div id="toast-container" aria-live="polite" role="region" aria-label="Notifications"></div>
 </div>
 
 <!-- Metenox Manual Materials Modal -->
@@ -613,6 +729,24 @@
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button class="btn btn-ghost" id="gas-modal-cancel">Cancel</button>
       <button class="btn btn-primary" id="gas-modal-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Fuel/mo Override Modal -->
+<div id="fuel-override-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center">
+  <div class="card" style="width:340px;max-width:95vw">
+    <div class="card-title">Fuel per month — <span id="fuel-override-name"></span></div>
+    <input type="hidden" id="fuel-override-id">
+    <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:12px">Set a manual value (fuel blocks per month) or leave empty to use automatic calculation from online service modules.</p>
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Fuel blocks per month</label>
+      <input type="number" id="fuel-override-value" min="0" step="100" placeholder="Automatic">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn btn-ghost" id="fuel-override-clear">Clear (use automatic)</button>
+      <button class="btn btn-ghost" id="fuel-override-cancel">Cancel</button>
+      <button class="btn btn-primary" id="fuel-override-save">Save</button>
     </div>
   </div>
 </div>

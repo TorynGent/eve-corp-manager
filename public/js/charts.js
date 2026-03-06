@@ -3,6 +3,32 @@ Chart.defaults.color        = '#7a95b5';
 Chart.defaults.borderColor  = '#1e304f';
 Chart.defaults.font.family  = "'Segoe UI', system-ui, sans-serif";
 
+// Resolve current theme colors from CSS (respects color-blind mode on #app)
+function getThemeColors() {
+  const app = document.getElementById('app');
+  if (!app) return { red: '#ff5555', green: '#00d4aa', orange: '#ff9933', gold: '#f0c040', blue: '#4a9eff' };
+  const s = getComputedStyle(app);
+  return {
+    red:   (s.getPropertyValue('--red').trim())   || '#ff5555',
+    green: (s.getPropertyValue('--green').trim()) || '#00d4aa',
+    orange:(s.getPropertyValue('--orange').trim())|| '#ff9933',
+    gold:  (s.getPropertyValue('--gold').trim())  || '#f0c040',
+    blue:  (s.getPropertyValue('--blue').trim())  || '#4a9eff',
+  };
+}
+
+// Hex or rgb/rgba with alpha for Chart.js
+function themeColorWithAlpha(cssValue, alpha) {
+  if (!cssValue) return `rgba(255,85,85,${alpha})`;
+  if (cssValue.startsWith('#')) {
+    const r = parseInt(cssValue.slice(1, 3), 16), g = parseInt(cssValue.slice(3, 5), 16), b = parseInt(cssValue.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+  const m = cssValue.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (m) return `rgba(${m[1]},${m[2]},${m[3]},${alpha})`;
+  return cssValue;
+}
+
 const EVE_COLORS = [
   '#4a9eff','#00d4aa','#f0c040','#9b7fd4','#ff9933',
   '#ff5555','#5ba4f5','#2ecc71','#e74c3c','#e67e22',

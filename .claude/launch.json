@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "EVE Corp Manager",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "electron"],
+      "port": 3000
+    },
+    {
+      "name": "FAT PAP Manager",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "G:\\Thumbnails\\EVE\\fat-pap-app", "run", "electron"],
+      "port": 3001
+    }
+  ]
+}

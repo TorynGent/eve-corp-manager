@@ -90,6 +90,21 @@ router.get('/', requireAuth, (req, res) => {
   res.json({ top10, recentKills: recent, totalKills: kills.length, period: reqPeriod || 'rolling30', periodLabel, periods });
 });
 
+// GET /api/kills/history — per-period totals (kills count + ISK destroyed) for history chart
+// Returns calendar months that have at least one kill in corp_kills.
+router.get('/history', requireAuth, (req, res) => {
+  const rows = db.prepare(`
+    SELECT
+      substr(kill_time, 1, 7) AS period,
+      COUNT(*) AS kills,
+      COALESCE(SUM(total_value), 0) AS iskDestroyed
+    FROM corp_kills
+    GROUP BY substr(kill_time, 1, 7)
+    ORDER BY period ASC
+  `).all();
+  res.json({ history: rows });
+});
+
 // POST /api/kills/sync — manually trigger zKillboard sync
 router.post('/sync', requireAuth, async (req, res) => {
   const token = getToken(req.session.characterId);

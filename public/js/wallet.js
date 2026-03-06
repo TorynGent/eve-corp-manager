@@ -13,10 +13,19 @@ async function loadWallet() {
 async function loadTaxCharts() {
   try {
     const period = document.getElementById('wallet-period-select').value || undefined;
-    const [groups, top5] = await Promise.all([
+    const [groups, top5, rates] = await Promise.all([
       api.get('/api/wallet/groups', period ? { period } : {}),
       api.get('/api/wallet/taxpayers', { limit: 5, ...(period ? { period } : {}) }),
+      api.get('/api/wallet/rates'),
     ]);
+
+    // Tax rates info
+    const ratesEl = document.getElementById('tax-rates-info');
+    if (ratesEl) {
+      const iskStr = rates.taxRatePercent != null ? `${rates.taxRatePercent}%` : '—';
+      const miningStr = rates.miningTaxRatePercent != null ? `${rates.miningTaxRatePercent}%` : '—';
+      ratesEl.textContent = `ISK tax: ${iskStr} · Mining tax: ${miningStr}${!rates.taxRatePercent && !rates.miningTaxRatePercent ? ' (set in Settings)' : ''}`;
+    }
 
     // Donut chart — by main group
     if (groups.data && groups.data.length) {
@@ -71,12 +80,14 @@ async function loadWalletHistory() {
 
 async function loadJournal() {
   const filter = document.getElementById('journal-filter').value.trim();
+  const search = document.getElementById('journal-search')?.value.trim() || '';
   try {
     const period = document.getElementById('wallet-period-select').value || undefined;
     const data = await api.get('/api/wallet/journal', {
       page: journalPage,
       ...(filter ? { type: filter } : {}),
       ...(period ? { period } : {}),
+      ...(search ? { search } : {}),
     });
 
     journalPages = data.pages;
@@ -132,8 +143,92 @@ document.getElementById('journal-next').addEventListener('click', () => {
 document.getElementById('journal-filter').addEventListener('keydown', e => {
   if (e.key === 'Enter') { journalPage = 1; loadJournal(); }
 });
+document.getElementById('journal-search')?.addEventListener('input', () => {
+  journalPage = 1;
+});
+document.getElementById('journal-search')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { journalPage = 1; loadJournal(); }
+});
+document.getElementById('journal-search-btn')?.addEventListener('click', () => {
+  journalPage = 1;
+  loadJournal();
+});
+
+async function downloadCsv(url, defaultFilename) {
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok) throw new Error(res.statusText);
+  const blob = await res.blob();
+  const name = res.headers.get('Content-Disposition')?.match(/filename="?([^";\n]+)"?/)?.[1] || defaultFilename;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+document.getElementById('journal-export-csv').addEventListener('click', async () => {
+  const period = document.getElementById('wallet-period-select').value || '';
+  const type   = document.getElementById('journal-filter').value.trim() || 'all';
+  const params = new URLSearchParams();
+  if (period) params.set('period', period);
+  if (type !== 'all') params.set('type', type);
+  try {
+    await downloadCsv(`/api/wallet/journal/export?${params}`, 'wallet-journal.csv');
+  } catch (err) {
+    toast('Export failed: ' + err.message, 'error');
+  }
+});
+
+document.getElementById('wallet-export-tax-csv').addEventListener('click', async () => {
+  const period = document.getElementById('wallet-period-select').value || '';
+  const params = period ? `?period=${encodeURIComponent(period)}` : '';
+  try {
+    await downloadCsv(`/api/wallet/tax-summary/export${params}`, 'tax-summary.csv');
+  } catch (err) {
+    toast('Export failed: ' + err.message, 'error');
+  }
+});
+
 document.getElementById('wallet-period-select').addEventListener('change', () => {
   journalPage = 1; loadPnl(); loadTaxCharts(); loadJournal();
+});
+
+// Period presets: set select and reload
+function setWalletPeriod(value) {
+  const sel = document.getElementById('wallet-period-select');
+  if (!sel) return;
+  if (value === '') {
+    sel.value = '';
+  } else if (value === 'this') {
+    const yyyyMm = new Date().toISOString().slice(0, 7);
+    if (![...sel.options].some(o => o.value === yyyyMm)) {
+      const opt = document.createElement('option');
+      opt.value = yyyyMm;
+      opt.textContent = yyyyMm;
+      sel.appendChild(opt);
+    }
+    sel.value = yyyyMm;
+  } else if (value === 'last') {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    const yyyyMm = d.toISOString().slice(0, 7);
+    if (![...sel.options].some(o => o.value === yyyyMm)) {
+      const opt = document.createElement('option');
+      opt.value = yyyyMm;
+      opt.textContent = yyyyMm;
+      sel.appendChild(opt);
+    }
+    sel.value = yyyyMm;
+  } else {
+    sel.value = value;
+  }
+  journalPage = 1;
+  loadPnl();
+  loadTaxCharts();
+  loadJournal();
+}
+document.querySelectorAll('#tab-wallet .period-preset[data-period]').forEach(btn => {
+  btn.addEventListener('click', () => setWalletPeriod(btn.dataset.period));
 });
 
 // ── P&L (Multi-Wallet T-Account View) ─────────────────────────────────────────

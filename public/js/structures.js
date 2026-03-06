@@ -15,7 +15,7 @@ async function loadStructureInventory() {
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px;border-bottom:1px solid var(--border);margin-bottom:8px">
           <span style="font-size:0.85rem;font-weight:700">Total: ${fmtNum(gas.total)} units</span>
           <span style="font-size:0.85rem;font-weight:700;${daysColor}">${gas.daysLeft != null ? gas.daysLeft + 'd remaining' : '—'}
-            <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400"> (${gas.metenoxCount} Metenox × 200/hr)</span>
+            <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400"> (${gas.metenoxCount} Metenox × ${gas.consumptionPerHour != null && gas.metenoxCount > 0 ? Math.round(gas.consumptionPerHour / gas.metenoxCount) : 200}/hr)</span>
           </span>
         </div>`;
       const rows = gas.rows.map(r => `
@@ -38,7 +38,7 @@ async function loadStructureInventory() {
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px;border-bottom:1px solid var(--border);margin-bottom:8px">
           <span style="font-size:0.85rem;font-weight:700">Total: ${fmtNum(fuel.total)} blocks</span>
           <span style="font-size:0.85rem;font-weight:700;${daysColor}">${fuel.daysLeft != null ? fuel.daysLeft + 'd remaining' : '—'}
-            <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400"> (${fuel.structureCount} structs × 5/hr)</span>
+            <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400"> (${fuel.consumptionPerHour ?? 0} fuel/hr total)</span>
           </span>
         </div>`;
       const rows = fuel.rows.map(r => `
@@ -63,13 +63,15 @@ async function loadStructureInventory() {
 async function loadStructures() {
   loadStructureInventory(); // load gas/fuel stock in parallel
   try {
-    const data = await api.get('/api/structures');
+    const resp = await api.get('/api/structures');
+    const data = resp.structures || resp;
+    const gasConsumptionPerMonth = resp.gasConsumptionPerMonth != null ? resp.gasConsumptionPerMonth : 144000;
     const tbody = document.getElementById('structures-tbody');
     const tfoot = document.getElementById('structures-tfoot');
     const alertsEl = document.getElementById('struct-alerts');
 
     if (!data.length) {
-      tbody.innerHTML = '<tr><td colspan="9" class="empty">No structures found. Trigger a sync to load structure data.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" class="empty">No structures found. Trigger a sync to load structure data.</td></tr>';
       return;
     }
 
@@ -120,27 +122,66 @@ async function loadStructures() {
         <td class="text-right dim">${fmtDate(s.fuelExpires)}</td>
         <td class="text-right">${fuelDaysCell}</td>
         <td>${fuelBar}</td>
+        <td class="text-right isk">${s.fuelPerMonth != null ? s.fuelPerMonth.toLocaleString() : '—'} <button type="button" class="btn btn-ghost btn-small structure-fuel-edit" style="padding:2px 6px;font-size:0.7rem;margin-left:4px" data-structure-id="${s.structureId}" data-fuel-value="${s.fuelPerMonth != null ? s.fuelPerMonth : ''}" data-override="${s.fuelOverride ? '1' : '0'}" data-name="${(s.name || '').replace(/"/g, '&quot;')}" title="Override fuel/mo (leave empty for automatic)">✏️</button></td>
         <td class="text-right">${gasDaysCell}</td>
         <td>${gasBar}</td>
         <td>${gasAction}</td>
       </tr>`;
     }).join('');
 
-    // Footer totals
-    const fuelPerMonth  = data.reduce((s, r) => s + (r.typeName === 'Fortizar' ? 5400 : r.typeName === 'Athanor' ? 9360 : r.isMetenox ? 3600 : 0), 0);
-    const gasPerMonth   = data.filter(r => r.isMetenox).length * 144000;
+    // Footer totals — fuel/mo and gas/mo from API (fuel = sum of per-structure consumption from online services)
+    const totalFuelPerMonth = data.reduce((s, r) => s + (r.fuelPerMonth || 0), 0);
+    const gasPerMonth   = data.filter(r => r.isMetenox).length * gasConsumptionPerMonth;
     tfoot.innerHTML = `<tr>
       <td colspan="3"><strong>Totals</strong></td>
-      <td></td><td></td>
-      <td class="isk"><strong>${fuelPerMonth.toLocaleString()} fuel/mo</strong></td>
+      <td></td><td></td><td></td>
+      <td class="isk" title="Fuel blocks per month from online service modules."><strong>${totalFuelPerMonth.toLocaleString()} fuel/mo</strong></td>
       <td></td>
-      <td class="isk"><strong>${gasPerMonth.toLocaleString()} gas/mo</strong></td>
+      <td class="isk" title="Metenox gas units per month (Settings → Gas consumption per month)."><strong>${gasPerMonth.toLocaleString()} gas/mo</strong></td>
       <td></td>
     </tr>`;
 
   } catch (err) {
     document.getElementById('structures-tbody').innerHTML =
-      `<tr><td colspan="9" class="alert alert-error">Error: ${err.message}</td></tr>`;
+      `<tr><td colspan="10" class="alert alert-error">Error: ${err.message}</td></tr>`;
+  }
+}
+
+function editStructureFuel(btn) {
+  const id = btn.dataset.structureId;
+  const currentValue = btn.dataset.fuelValue;
+  const structureName = (btn.dataset.name || '').replace(/&quot;/g, '"');
+  document.getElementById('fuel-override-id').value = id;
+  document.getElementById('fuel-override-name').textContent = structureName || 'Structure';
+  const input = document.getElementById('fuel-override-value');
+  const num = currentValue !== '' ? parseInt(currentValue, 10) : NaN;
+  input.value = (!isNaN(num) && num >= 0) ? num : '';
+  document.getElementById('fuel-override-modal').style.display = 'flex';
+  setTimeout(() => input.focus(), 50);
+}
+
+async function saveFuelOverride() {
+  const id = document.getElementById('fuel-override-id').value;
+  const raw = document.getElementById('fuel-override-value').value.trim();
+  try {
+    await api.put(`/api/structures/${id}/fuel-override`, { fuelPerMonth: raw === '' ? null : parseInt(raw, 10) });
+    document.getElementById('fuel-override-modal').style.display = 'none';
+    loadStructures();
+    loadStructureInventory();
+  } catch (err) {
+    toast('Failed to save: ' + err.message, 'error');
+  }
+}
+
+async function clearFuelOverride() {
+  const id = document.getElementById('fuel-override-id').value;
+  try {
+    await api.put(`/api/structures/${id}/fuel-override`, { fuelPerMonth: null });
+    document.getElementById('fuel-override-modal').style.display = 'none';
+    loadStructures();
+    loadStructureInventory();
+  } catch (err) {
+    toast('Failed to clear: ' + err.message, 'error');
   }
 }
 
@@ -153,6 +194,7 @@ function openGasModal(structureId, name, gasData) {
   document.getElementById('gas-notes').value          = gasData.notes             || '';
   const modal = document.getElementById('gas-modal');
   modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('gas-refill-date')?.focus(), 50);
 }
 
 function closeGasModal() {
@@ -171,12 +213,37 @@ async function saveGasModal() {
     closeGasModal();
     loadStructures();
   } catch (err) {
-    alert('Save failed: ' + err.message);
+    toast('Save failed: ' + err.message, 'error');
   }
 }
 
 document.getElementById('gas-modal-cancel').addEventListener('click', closeGasModal);
 document.getElementById('gas-modal-save').addEventListener('click', saveGasModal);
+document.getElementById('gas-modal')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeGasModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('gas-modal')?.style.display === 'flex')
+    closeGasModal();
+});
+
+document.getElementById('fuel-override-save').addEventListener('click', saveFuelOverride);
+document.getElementById('fuel-override-cancel').addEventListener('click', () => {
+  document.getElementById('fuel-override-modal').style.display = 'none';
+});
+document.getElementById('fuel-override-clear').addEventListener('click', clearFuelOverride);
+document.getElementById('fuel-override-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) document.getElementById('fuel-override-modal').style.display = 'none';
+});
+document.getElementById('fuel-override-value').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('fuel-override-save').click();
+  if (e.key === 'Escape') document.getElementById('fuel-override-cancel').click();
+});
+
+document.getElementById('structures-table')?.addEventListener('click', e => {
+  const btn = e.target.closest('.structure-fuel-edit');
+  if (btn) editStructureFuel(btn);
+});
 
 // ── Manual location name override ─────────────────────────────────────────────
 let _locRenameId = null;
@@ -209,7 +276,7 @@ document.getElementById('loc-rename-save').addEventListener('click', async () =>
     await api.put('/api/structures/location-name', { locationId: _locRenameId, name: newName });
     loadStructureInventory();
   } catch (err) {
-    alert('Failed to save name: ' + err.message);
+    toast('Failed to save name: ' + err.message, 'error');
   }
   _locRenameId = null;
 });

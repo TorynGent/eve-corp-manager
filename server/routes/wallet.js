@@ -27,6 +27,14 @@ function resolveChar(charId) {
   return { charName, mainName: mapping?.main_name || charName };
 }
 
+/** Escape a value for CSV (wrap in quotes if contains comma, quote, or newline) */
+function csvEscape(val) {
+  if (val == null) return '';
+  const s = String(val);
+  if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
 /**
  * Compute rolling 30-day taxpayer list directly from wallet_journal (division 1 only).
  * Groups alts into their main character and returns sorted array.
@@ -85,9 +93,20 @@ router.get('/taxpayers', requireAuth, (req, res) => {
   res.json({ period: 'rolling', data });
 });
 
+/** GET /api/wallet/rates — corp ISK tax % and mining tax % (from settings, for display) */
+router.get('/rates', requireAuth, (req, res) => {
+  const taxRate = getSetting('corp_tax_rate');
+  const miningTaxRate = getSetting('corp_mining_tax_rate');
+  res.json({
+    taxRatePercent: taxRate != null && taxRate !== '' ? parseFloat(taxRate) : null,
+    miningTaxRatePercent: miningTaxRate != null && miningTaxRate !== '' ? parseFloat(miningTaxRate) : null,
+  });
+});
+
 /**
- * GET /api/wallet/journal?page=1&type=all&period=2026-03
+ * GET /api/wallet/journal?page=1&type=all&period=2026-03&search=Name
  * Always returns Master Wallet (division 1) entries only.
+ * search: optional; filter by first_party or second_party name/ID (via name_cache or ID match).
  */
 router.get('/journal', requireAuth, (req, res) => {
   const page   = Math.max(1, parseInt(req.query.page || '1', 10));
@@ -95,6 +114,7 @@ router.get('/journal', requireAuth, (req, res) => {
   const offset = (page - 1) * limit;
   const period = req.query.period || null;
   const type   = req.query.type   || 'all';
+  const search = (req.query.search || '').trim();
 
   // Always division 1 (Master Wallet) — other divisions are inter-division transfers etc.
   let where = 'division = 1';
@@ -102,6 +122,29 @@ router.get('/journal', requireAuth, (req, res) => {
 
   if (period) { where += ' AND date LIKE ?'; args.push(period + '%'); }
   if (type !== 'all') { where += ' AND ref_type = ?'; args.push(type); }
+
+  if (search) {
+    // Resolve search to character/corp IDs from name_cache (LIKE)
+    const escaped = search.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+    const like = '%' + escaped + '%';
+    const ids = db.prepare("SELECT id FROM name_cache WHERE name LIKE ? ESCAPE '\\'").all(like);
+    const idList = ids.map(r => r.id);
+    if (idList.length) {
+      const placeholders = idList.map(() => '?').join(',');
+      where += ` AND (first_party_id IN (${placeholders}) OR second_party_id IN (${placeholders}))`;
+      args.push(...idList, ...idList);
+    } else {
+      // Try numeric ID
+      const num = parseInt(search, 10);
+      if (!isNaN(num)) {
+        where += ' AND (first_party_id = ? OR second_party_id = ?)';
+        args.push(num, num);
+      } else {
+        // No match — return empty
+        where += ' AND 0';
+      }
+    }
+  }
 
   const total = db.prepare(`SELECT COUNT(*) AS c FROM wallet_journal WHERE ${where}`).get(...args).c;
   const rows  = db.prepare(`
@@ -164,6 +207,66 @@ router.get('/groups', requireAuth, (req, res) => {
 router.get('/periods', requireAuth, (req, res) => {
   const rows = db.prepare('SELECT DISTINCT period FROM tax_summary ORDER BY period DESC').all();
   res.json(rows.map(r => r.period));
+});
+
+/**
+ * GET /api/wallet/journal/export?period=YYYY-MM&type=all&division=1
+ * Returns CSV of wallet journal (division 1 by default). Limited to 10000 rows.
+ */
+router.get('/journal/export', requireAuth, (req, res) => {
+  const period = req.query.period || null;
+  const type   = req.query.type   || 'all';
+  const division = parseInt(req.query.division || '1', 10);
+  const limit  = 10000;
+
+  let where = 'division = ?';
+  const args = [division];
+  if (period) { where += ' AND date LIKE ?'; args.push(period + '%'); }
+  if (type !== 'all') { where += ' AND ref_type = ?'; args.push(type); }
+
+  const rows = db.prepare(`
+    SELECT date, division, ref_type, first_party_id, second_party_id, amount, balance, description
+    FROM wallet_journal WHERE ${where}
+    ORDER BY date DESC LIMIT ?
+  `).all(...args, limit);
+
+  const header = 'Date,Division,Ref Type,First Party ID,Second Party ID,Amount,Balance,Description';
+  const lines = [header, ...rows.map(r =>
+    [r.date, r.division, r.ref_type, r.first_party_id, r.second_party_id, r.amount, r.balance, r.description || ''].map(csvEscape).join(',')
+  )];
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="wallet-journal${period ? '-' + period : ''}.csv"`);
+  res.send(lines.join('\r\n'));
+});
+
+/**
+ * GET /api/wallet/tax-summary/export?period=YYYY-MM
+ * Returns CSV of tax summary for the given month. If no period, exports all periods.
+ */
+router.get('/tax-summary/export', requireAuth, (req, res) => {
+  const period = req.query.period || null;
+
+  let rows;
+  if (period) {
+    rows = db.prepare(`
+      SELECT period, character_id, character_name, main_name, total_amount
+      FROM tax_summary WHERE period = ?
+      ORDER BY total_amount DESC
+    `).all(period);
+  } else {
+    rows = db.prepare(`
+      SELECT period, character_id, character_name, main_name, total_amount
+      FROM tax_summary ORDER BY period DESC, total_amount DESC
+    `).all();
+  }
+
+  const header = 'Period,Character ID,Character Name,Main Name,Total Amount';
+  const lines = [header, ...rows.map(r =>
+    [r.period, r.character_id, r.character_name, r.main_name, r.total_amount].map(csvEscape).join(',')
+  )];
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="tax-summary${period ? '-' + period : ''}.csv"`);
+  res.send(lines.join('\r\n'));
 });
 
 /**

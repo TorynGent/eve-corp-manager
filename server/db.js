@@ -2,6 +2,7 @@
 const Database = require('better-sqlite3');
 const path     = require('path');
 const fs       = require('fs');
+const { encryptValue, decryptValue } = require('./secure-storage');
 
 // DB_PATH can be overridden by Electron (or any launcher) via environment variable
 // so the database lives in the user's data folder, not the install directory.
@@ -252,6 +253,11 @@ try { db.exec('ALTER TABLE assets ADD COLUMN location_flag TEXT'); } catch {}
 
 /** Upsert a token row */
 function saveToken(data) {
+  const payload = {
+    ...data,
+    access_token:  encryptValue(data.access_token),
+    refresh_token: encryptValue(data.refresh_token),
+  };
   db.prepare(`
     INSERT INTO tokens (character_id, character_name, corporation_id, corporation_name,
                         access_token, refresh_token, expires_at, scopes)
@@ -265,16 +271,21 @@ function saveToken(data) {
       refresh_token    = excluded.refresh_token,
       expires_at       = excluded.expires_at,
       scopes           = excluded.scopes
-  `).run(data);
+  `).run(payload);
 }
 
 function getToken(characterId) {
-  return db.prepare('SELECT * FROM tokens WHERE character_id = ?').get(characterId);
+  const row = db.prepare('SELECT * FROM tokens WHERE character_id = ?').get(characterId);
+  if (!row) return undefined;
+  row.access_token = decryptValue(row.access_token);
+  row.refresh_token = decryptValue(row.refresh_token);
+  return row;
 }
 
 function updateAccessToken(characterId, accessToken, expiresAt) {
+  const encrypted = encryptValue(accessToken);
   db.prepare('UPDATE tokens SET access_token = ?, expires_at = ? WHERE character_id = ?')
-    .run(accessToken, expiresAt, characterId);
+    .run(encrypted, expiresAt, characterId);
 }
 
 function getSetting(key, defaultValue = null) {
@@ -287,7 +298,25 @@ function setSetting(key, value) {
     .run(key, String(value));
 }
 
-function getSyncStatus(key) {
+// One-time migration: encrypt any tokens still stored in plaintext (e.g. from before token encryption).
+function runTokenEncryptionMigration() {
+  const key = 'migration_tokens_encrypted_v1';
+  if (getSetting(key) === '1') return;
+  const rows = db.prepare('SELECT character_id, access_token, refresh_token FROM tokens').all();
+  let migrated = 0;
+  for (const row of rows) {
+    if (row.access_token && !row.access_token.startsWith('enc')) {
+      db.prepare('UPDATE tokens SET access_token = ?, refresh_token = ? WHERE character_id = ?')
+        .run(encryptValue(row.access_token), encryptValue(row.refresh_token || ''), row.character_id);
+      migrated++;
+    }
+  }
+  if (migrated > 0) console.log('[DB] Migrated', migrated, 'token row(s) to encrypted storage.');
+  setSetting(key, '1');
+}
+runTokenEncryptionMigration();
+
+function getSyncStatus(key) {) {
   return db.prepare('SELECT * FROM sync_status WHERE key = ?').get(key);
 }
 
@@ -307,6 +336,7 @@ function getCachedName(id) {
 
 module.exports = {
   db,
+  DB_PATH,
   saveToken, getToken, updateAccessToken,
   getSetting, setSetting,
   getSyncStatus, setSyncStatus,

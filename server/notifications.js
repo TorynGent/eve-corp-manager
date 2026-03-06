@@ -21,6 +21,31 @@ function getRecipients() {
   return raw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
 }
 
+function getDiscordWebhookUrl() {
+  const url = getSetting('discord_webhook_url', '').trim();
+  return url && url.startsWith('https://discord.com/api/webhooks/') ? url : null;
+}
+
+async function sendTestDiscord() {
+  const url = getDiscordWebhookUrl();
+  if (!url) throw new Error('Discord webhook URL not set. Enter it in Settings → Email & Discord Notifications.');
+  const axios = require('axios');
+  await axios.post(url, {
+    content: '@here ✅ **EVE Corp Dashboard** — Test message. Fuel and gas alerts will ping @here when structures fall below your thresholds.',
+  }, { headers: { 'Content-Type': 'application/json' }, timeout: 10000 });
+}
+
+async function sendDiscordAlert(alerts) {
+  const url = getDiscordWebhookUrl();
+  if (!url || !alerts.length) return;
+  const axios = require('axios');
+  const lines = alerts.map(a =>
+    `• **${a.structureName}** (${a.systemName}) — ${a.alertType === 'fuel' ? '⛽ Fuel' : '💨 Gas'} — ${a.daysLeft.toFixed(1)} days left (expires ${a.expires || '—'})`
+  ).join('\n');
+  const content = `@here ⚠️ **EVE Corp Structure Alert** — ${alerts.length} structure${alerts.length > 1 ? 's' : ''} need attention:\n\n${lines}`;
+  await axios.post(url, { content }, { headers: { 'Content-Type': 'application/json' }, timeout: 10000 });
+}
+
 async function sendTestEmail() {
   const transport = buildTransport();
   const from = getSetting('smtp_from', 'EVE Corp Dashboard <noreply@example.com>');
@@ -38,12 +63,14 @@ async function sendAlertDigest(alerts) {
   if (enabled !== 'true') return;
 
   const recipients = getRecipients();
-  if (!recipients.length) return;
+  const discordUrl = getDiscordWebhookUrl();
+  if (!recipients.length && !discordUrl) return;
 
-  const transport = buildTransport();
-  const from = getSetting('smtp_from', 'EVE Corp Dashboard <noreply@example.com>');
+  if (recipients.length) {
+    const transport = buildTransport();
+    const from = getSetting('smtp_from', 'EVE Corp Dashboard <noreply@example.com>');
 
-  const rows = alerts.map(a => `
+    const rows = alerts.map(a => `
     <tr>
       <td style="padding:8px;border-bottom:1px solid #1e304f">${a.structureName}</td>
       <td style="padding:8px;border-bottom:1px solid #1e304f">${a.systemName}</td>
@@ -80,6 +107,15 @@ async function sendAlertDigest(alerts) {
     subject: `⚠️ EVE Corp Alert — ${alerts.length} structure${alerts.length > 1 ? 's' : ''} need attention`,
     html,
   });
+  }
+
+  if (discordUrl) {
+    try {
+      await sendDiscordAlert(alerts);
+    } catch (discordErr) {
+      console.error('[Notifications] Discord webhook error:', discordErr.message);
+    }
+  }
 
   // Log sent alerts (deduplicate: don't re-send same structure+type within 24h)
   const now = Math.floor(Date.now() / 1000);
@@ -161,4 +197,4 @@ async function checkAndNotify() {
   }
 }
 
-module.exports = { sendTestEmail, sendAlertDigest, checkAndNotify };
+module.exports = { sendTestEmail, sendTestDiscord, sendAlertDigest, checkAndNotify };

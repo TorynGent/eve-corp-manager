@@ -18,10 +18,11 @@
         const errDetail = document.getElementById('login-error-detail');
         if (authError === 'missing_scopes') {
           const char    = params.get('char') || 'That character';
-          const missing = (params.get('missing') || '').split(',').filter(Boolean);
+          const missing = (params.get('missing') || '').split(',').map(s => s.trim()).filter(Boolean);
           errMsg.textContent = `${char} is missing required ESI permissions.`;
+          const esc = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
           errDetail.innerHTML = `Please log in with a CEO or Director character and approve all scopes.<br>
-            Missing: <code style="color:#ffb347">${missing.join('</code>, <code style="color:#ffb347">')}</code>`;
+            Missing: ${missing.map(m => '<code style="color:#ffb347">' + esc(m) + '</code>').join(', ')}`;
         } else {
           errMsg.textContent = 'Authentication failed.';
           errDetail.textContent = params.get('message') || 'Please try again.';
@@ -39,6 +40,12 @@
     document.getElementById('login-page').style.display = 'none';
     const appEl = document.getElementById('app');
     appEl.classList.add('visible');
+
+    // Apply saved display settings (e.g. color blind mode)
+    try {
+      const display = await api.get('/api/settings/display');
+      appEl.classList.toggle('color-blind-mode', !!display.colorBlindMode);
+    } catch (_) {}
 
     // Header — use real EVE corp logo image, fall back to initials if it fails
     document.getElementById('hdr-corp').textContent = me.corporationName || 'Your Corporation';
@@ -80,6 +87,20 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
     document.getElementById('tab-' + name).classList.add('active');
     loadTabContent(name);
   });
+});
+
+// Arrow key tab switching (when app visible and focus not in an input)
+document.addEventListener('keydown', (e) => {
+  if (!document.getElementById('app')?.classList.contains('visible')) return;
+  const active = document.activeElement;
+  const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable);
+  if (isInput) return;
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const tabs = [...document.querySelectorAll('.nav-tab')];
+  if (!tabs.length) return;
+  const idx = tabs.findIndex(t => t.classList.contains('active'));
+  let next = e.key === 'ArrowLeft' ? (idx <= 0 ? tabs.length - 1 : idx - 1) : (idx >= tabs.length - 1 ? 0 : idx + 1);
+  tabs[next].click();
 });
 
 function loadTabContent(name) {
@@ -156,15 +177,15 @@ document.getElementById('btn-sync-now').addEventListener('click', async () => {
   } catch (err) {
     btn.disabled = false; btn.textContent = '⟳ Sync Now';
     setSyncDot('red', 'Sync failed');
-    alert('Sync error: ' + err.message);
+    toast('Sync error: ' + err.message, 'error');
   }
 });
 
 document.getElementById('btn-snapshot').addEventListener('click', async () => {
   try {
     await api.post('/api/snapshots/create');
-    alert('📸 Monthly snapshot created!');
-  } catch (err) { alert('Snapshot error: ' + err.message); }
+    toast('Monthly snapshot created!', 'success');
+  } catch (err) { toast('Snapshot error: ' + err.message, 'error'); }
 });
 
 // ── Sync Indicator ────────────────────────────────────────────────────────────

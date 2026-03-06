@@ -1,30 +1,39 @@
-// Lightweight fetch wrapper
+// Lightweight fetch wrapper — on error, parses response body for error/message when possible
+async function handleResponse(res, path) {
+  if (res.ok) return res.json();
+  const text = await res.text();
+  let msg = `API ${res.status}: ${path}`;
+  try {
+    const body = JSON.parse(text);
+    if (body && (body.error || body.message)) msg = String(body.error || body.message);
+  } catch (_) {
+    if (text && text.length < 200) msg = text;
+  }
+  throw new Error(msg);
+}
+
 const api = {
   async get(path, params = {}) {
     const qs = Object.keys(params).length
       ? '?' + new URLSearchParams(params) : '';
     const res = await fetch(path + qs);
-    if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
-    return res.json();
+    return handleResponse(res, path);
   },
   async post(path, body = {}) {
     const res = await fetch(path, { method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body) });
-    if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
-    return res.json();
+    return handleResponse(res, path);
   },
   async put(path, body = {}) {
     const res = await fetch(path, { method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body) });
-    if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
-    return res.json();
+    return handleResponse(res, path);
   },
   async del(path) {
     const res = await fetch(path, { method: 'DELETE' });
-    if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
-    return res.json();
+    return handleResponse(res, path);
   },
 };
 
@@ -77,4 +86,15 @@ function fmtNum(n) {
 // XSS-safe HTML escape — use whenever inserting external/user data into innerHTML
 function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Global toast — use instead of alert() for success/error. type: 'success' | 'error' | 'info'
+function toast(message, type) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + (type === 'success' || type === 'error' ? type : 'info');
+  el.textContent = message;
+  container.appendChild(el);
+  setTimeout(function () { if (el.parentNode) el.remove(); }, 4500);
 }

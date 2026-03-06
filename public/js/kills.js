@@ -4,7 +4,10 @@ async function loadKills() {
   const period    = periodSel?.value || 'rolling30';
 
   try {
-    const data = await api.get(`/api/kills?period=${period}`);
+    const [data, historyRes] = await Promise.all([
+      api.get(`/api/kills?period=${period}`),
+      api.get('/api/kills/history'),
+    ]);
 
     // Populate period selector — rolling30 always first, labelled "Last 30 days"
     if (periodSel && data.periods?.length) {
@@ -36,7 +39,8 @@ async function loadKills() {
           </div>
         </div>`).join('');
 
-      // Kills count chart (not ISK — use raw Chart.js)
+      // Kills count chart (not ISK — use theme colors for color-blind mode)
+      const theme = getThemeColors();
       destroyChart('chart-kills');
       charts['chart-kills'] = new Chart(document.getElementById('chart-kills'), {
         type: 'bar',
@@ -45,8 +49,8 @@ async function loadKills() {
           datasets: [{
             label:           'Kills',
             data:            data.top10.map(k => k.kills),
-            backgroundColor: '#ff4a4a88',
-            borderColor:     '#ff4a4a',
+            backgroundColor: themeColorWithAlpha(theme.red, 0.53),
+            borderColor:     theme.red,
             borderWidth:     1,
           }],
         },
@@ -60,6 +64,75 @@ async function loadKills() {
           scales: {
             x: { grid: { color: 'rgba(30,48,79,.5)' }, ticks: { color: '#7a95b5', stepSize: 1 } },
             y: { grid: { display: false }, ticks: { color: '#c5d5e8' } },
+          },
+        },
+      });
+    }
+
+    // Kill history chart: total kills + ISK destroyed per month
+    const history = historyRes?.history || [];
+    if (history.length === 0) {
+      destroyChart('chart-kills-history');
+    } else {
+      const theme = getThemeColors();
+      const labels = history.map(h => h.period);
+      destroyChart('chart-kills-history');
+      charts['chart-kills-history'] = new Chart(document.getElementById('chart-kills-history'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Kills',
+              data: history.map(h => h.kills),
+              backgroundColor: themeColorWithAlpha(theme.red, 0.53),
+              borderColor: theme.red,
+              borderWidth: 1,
+              yAxisID: 'y',
+            },
+            {
+              label: 'ISK destroyed',
+              data: history.map(h => h.iskDestroyed),
+              type: 'line',
+              borderColor: theme.gold,
+              backgroundColor: 'transparent',
+              borderWidth: 2,
+              tension: 0.2,
+              fill: false,
+              yAxisID: 'y1',
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12 } },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  if (ctx.dataset.yAxisID === 'y1') return ` ${ctx.dataset.label}: ${fmtISK(ctx.raw)} ISK`;
+                  return ` ${ctx.dataset.label}: ${ctx.raw}`;
+                },
+              },
+            },
+          },
+          scales: {
+            y: {
+              type: 'linear',
+              position: 'left',
+              title: { display: true, text: 'Kills' },
+              grid: { color: 'rgba(30,48,79,.5)' },
+              ticks: { color: '#7a95b5', stepSize: 1 },
+            },
+            y1: {
+              type: 'linear',
+              position: 'right',
+              title: { display: true, text: 'ISK destroyed' },
+              grid: { drawOnChartArea: false },
+              ticks: { color: theme.gold, callback: v => fmtISK(v) },
+            },
+            x: { grid: { color: 'rgba(30,48,79,.5)' }, ticks: { color: '#7a95b5' } },
           },
         },
       });
@@ -91,6 +164,38 @@ async function loadKills() {
 
 document.getElementById('kills-period')?.addEventListener('change', loadKills);
 
+document.querySelectorAll('.kills-period-preset').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const period = btn.dataset.period;
+    const sel = document.getElementById('kills-period');
+    if (!sel) return;
+    if (period === 'rolling30') {
+      sel.value = 'rolling30';
+    } else if (period === 'this') {
+      const yyyyMm = new Date().toISOString().slice(0, 7);
+      if (![...sel.options].some(o => o.value === yyyyMm)) {
+        const opt = document.createElement('option');
+        opt.value = yyyyMm;
+        opt.textContent = yyyyMm;
+        sel.appendChild(opt);
+      }
+      sel.value = yyyyMm;
+    } else if (period === 'last') {
+      const d = new Date();
+      d.setMonth(d.getMonth() - 1);
+      const yyyyMm = d.toISOString().slice(0, 7);
+      if (![...sel.options].some(o => o.value === yyyyMm)) {
+        const opt = document.createElement('option');
+        opt.value = yyyyMm;
+        opt.textContent = yyyyMm;
+        sel.appendChild(opt);
+      }
+      sel.value = yyyyMm;
+    }
+    loadKills();
+  });
+});
+
 document.getElementById('btn-sync-kills')?.addEventListener('click', async () => {
   const btn = document.getElementById('btn-sync-kills');
   btn.disabled = true;
@@ -103,7 +208,7 @@ document.getElementById('btn-sync-kills')?.addEventListener('click', async () =>
       btn.textContent = '⟳ Sync Kills';
     }, 5000);
   } catch (err) {
-    alert('Kills sync error: ' + err.message);
+    toast('Kills sync error: ' + err.message, 'error');
     btn.disabled = false;
     btn.textContent = '⟳ Sync Kills';
   }
