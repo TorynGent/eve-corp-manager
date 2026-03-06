@@ -2,14 +2,15 @@ async function loadDashboard() {
   const errEl = document.getElementById('dashboard-error');
   if (errEl) { errEl.style.display = 'none'; errEl.innerHTML = ''; }
   try {
-    const [summary, snapshots, taxpayers, kills, scratchpad, expiries, dividends] = await Promise.all([
+    const [summary, snapshots, taxpayers, kills, metenox, health, scratchpad, expiries] = await Promise.all([
       api.get('/api/summary'),
       api.get('/api/snapshots'),
       api.get('/api/wallet/taxpayers'),
       api.get('/api/kills'),
+      api.get('/api/metenox'),
+      api.get('/api/health/members').catch(() => ({ summary: null })),
       api.get('/api/settings/scratchpad'),
       api.get('/api/structures/expiries'),
-      api.get('/api/dividends'),
     ]);
 
     // KPI tiles — wallet breakdown by division
@@ -18,7 +19,64 @@ async function loadDashboard() {
     document.getElementById('kpi-members').textContent = summary.activeMembers;
     document.getElementById('kpi-metenox').textContent = summary.metenoxCount;
     document.getElementById('kpi-members-sub').textContent = `of ${summary.totalMembers} total`;
+    const membersBreakdown = document.getElementById('kpi-members-breakdown');
+    if (membersBreakdown && health?.summary) {
+      const s = health.summary;
+      const parts = [];
+      if (s.hardcore != null) parts.push(`⚡ Hardcore ${s.hardcore}`);
+      if (s.active != null) parts.push(`✓ Active ${s.active}`);
+      if (s.atRisk != null) parts.push(`⚠ At risk ${s.atRisk}`);
+      if (s.inactive != null) parts.push(`◯ Inactive ${s.inactive}`);
+      membersBreakdown.textContent = parts.length ? parts.join(' · ') : '';
+      membersBreakdown.style.display = parts.length ? '' : 'none';
+    }
+    const metenoxKpiCard = document.getElementById('kpi-metenox-card');
+    if (metenoxKpiCard) metenoxKpiCard.style.display = summary.metenoxCount > 0 ? '' : 'none';
     document.getElementById('kpi-metenox-sub').textContent = `${summary.structureCount} structures total`;
+
+    // Mining this month (at-a-glance)
+    const miningEl = document.getElementById('overview-mining-line');
+    if (miningEl) {
+      const pilots = summary.miningPilotsThisMonth ?? 0;
+      const units = summary.miningUnitsThisMonth ?? 0;
+      if (pilots > 0 || units > 0) {
+        const u = units >= 1e9 ? (units / 1e9).toFixed(1) + 'B' : units >= 1e6 ? (units / 1e6).toFixed(1) + 'M' : units >= 1e3 ? (units / 1e3).toFixed(1) + 'K' : units;
+        miningEl.textContent = `Mining this month: ${pilots} pilot${pilots !== 1 ? 's' : ''} · ${u} units`;
+        miningEl.style.display = '';
+      } else {
+        miningEl.textContent = '';
+        miningEl.style.display = 'none';
+      }
+    }
+
+    // Metenox profit + Corp kills this month (slim cards)
+    const glanceEl = document.getElementById('overview-glance');
+    const metenoxCard = document.getElementById('overview-metenox-card');
+    const metenoxVal  = document.getElementById('overview-metenox-value');
+    const killsCard  = document.getElementById('overview-kills-card');
+    const killsVal   = document.getElementById('overview-kills-value');
+    const killsSub   = document.getElementById('overview-kills-sub');
+
+    let hasGlance = false;
+    if (summary.metenoxCount > 0 && metenox?.totals?.totalProfit != null) {
+      const profit = metenox.totals.totalProfit;
+      metenoxVal.textContent = (profit >= 0 ? '+' : '') + fmtISK(profit) + ' ISK';
+      metenoxVal.style.color = profit >= 0 ? 'var(--green)' : 'var(--red)';
+      metenoxCard.style.display = '';
+      hasGlance = true;
+    } else if (metenoxCard) {
+      metenoxCard.style.display = 'none';
+    }
+    const kCount = summary.killsThisMonth ?? 0;
+    const kIsk   = summary.iskDestroyedThisMonth ?? 0;
+    if (kCount > 0 || kIsk > 0) {
+      if (killsVal) killsVal.textContent = kCount + ' kill' + (kCount !== 1 ? 's' : '');
+      if (killsSub) killsSub.textContent = fmtISK(kIsk) + ' ISK destroyed';
+      if (killsCard) { killsCard.style.display = ''; hasGlance = true; }
+    } else if (killsCard) {
+      killsCard.style.display = 'none';
+    }
+    if (glanceEl) glanceEl.style.display = hasGlance ? 'grid' : 'none';
 
     // History line chart (use theme colors for color-blind mode)
     if (snapshots.length >= 2) {
@@ -52,9 +110,6 @@ async function loadDashboard() {
 
     // Upcoming Expiries
     renderExpiries(expiries);
-
-    // Dividend History
-    renderDividends(dividends);
 
   } catch (err) {
     console.error('Dashboard load error:', err);
@@ -142,11 +197,15 @@ function renderTopKillers(data, period, totalKills) {
 function renderExpiries(items) {
   const el = document.getElementById('expiries-content');
   if (!el) return;
+  const count = items?.length ?? 0;
+  const summary = count === 0
+    ? '<p class="empty" style="font-size:0.78rem;color:var(--green);margin-bottom:10px">All structures OK for the next 30 days.</p>'
+    : `<p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:10px">${count} structure${count !== 1 ? 's' : ''} with fuel or gas expiring within 30 days.</p>`;
   if (!items || items.length === 0) {
-    el.innerHTML = '<p class="empty" style="font-size:0.78rem;color:var(--green)">No structures expiring within 30 days.</p>';
+    el.innerHTML = summary;
     return;
   }
-  el.innerHTML = `
+  el.innerHTML = summary + `
     <table style="width:100%;border-collapse:collapse;font-size:0.76rem">
       <thead>
         <tr>
@@ -167,40 +226,6 @@ function renderExpiries(items) {
             <td style="padding:5px 6px;border-bottom:1px solid rgba(30,48,79,.4);text-align:right;font-weight:700;color:${color}">${d.toFixed(1)}d</td>
           </tr>`;
         }).join('')}
-      </tbody>
-    </table>`;
-}
-
-// ── Dividend History ───────────────────────────────────────────────────────────
-function renderDividends(data) {
-  const el = document.getElementById('dividends-content');
-  if (!el) return;
-  if (!data.available) {
-    el.innerHTML = '<p class="empty" style="font-size:0.78rem;color:var(--text-dim)">FAT PAP Manager not installed or no data yet.</p>';
-    return;
-  }
-  if (!data.periods || data.periods.length === 0) {
-    el.innerHTML = '<p class="empty" style="font-size:0.78rem;color:var(--text-dim)">No payout periods recorded yet.</p>';
-    return;
-  }
-  const rows = [...data.periods].reverse(); // oldest first
-  el.innerHTML = `
-    <table style="width:100%;border-collapse:collapse;font-size:0.76rem">
-      <thead>
-        <tr>
-          <th style="text-align:left;padding:5px 6px;color:var(--text-dim);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)">#</th>
-          <th style="text-align:left;padding:5px 6px;color:var(--text-dim);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)">Period</th>
-          <th style="text-align:right;padding:5px 6px;color:var(--text-dim);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)">Income</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(p => `<tr>
-          <td style="padding:5px 6px;border-bottom:1px solid rgba(30,48,79,.4);color:var(--text-dim)">${p.id}</td>
-          <td style="padding:5px 6px;border-bottom:1px solid rgba(30,48,79,.4)">
-            ${esc(p.start_date || '?')} – ${esc(p.end_date || '?')}
-          </td>
-          <td style="padding:5px 6px;border-bottom:1px solid rgba(30,48,79,.4);text-align:right" class="isk">${fmtISK(p.income)}</td>
-        </tr>`).join('')}
       </tbody>
     </table>`;
 }

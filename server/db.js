@@ -316,7 +316,7 @@ function runTokenEncryptionMigration() {
 }
 runTokenEncryptionMigration();
 
-function getSyncStatus(key) {) {
+function getSyncStatus(key) {
   return db.prepare('SELECT * FROM sync_status WHERE key = ?').get(key);
 }
 

@@ -80,9 +80,23 @@
       <div id="dashboard-error" style="display:none;margin-bottom:16px"></div>
       <div class="grid-4" id="kpi-tiles">
         <div class="card kpi" style="min-height:auto"><div class="label">Corp Wallet</div><div id="kpi-wallet-breakdown" style="font-size:0.82rem;margin-top:6px">—</div></div>
-        <div class="card kpi"><div class="label">Corp Equity</div><div class="value" id="kpi-equity">—</div><div class="sub" id="kpi-equity-sub">from monthly snapshot</div></div>
-        <div class="card kpi"><div class="label">Active Members</div><div class="value" id="kpi-members">—</div><div class="sub" id="kpi-members-sub">of total</div></div>
-        <div class="card kpi"><div class="label">Metenox Count</div><div class="value" id="kpi-metenox">—</div><div class="sub" id="kpi-metenox-sub">structures online</div></div>
+        <div class="card kpi" id="kpi-equity-card" title="Total net gains from snapshot to snapshot. Needs at least two monthly snapshots to show a value."><div class="label">Corp Equity</div><div class="value" id="kpi-equity">—</div><div class="sub" id="kpi-equity-sub">net change between snapshots (need 2+ months)</div></div>
+        <div class="card kpi"><div class="label">Active Members</div><div class="value" id="kpi-members">—</div><div class="sub" id="kpi-members-sub">of total</div><div class="sub" id="kpi-members-breakdown" style="font-size:0.7rem;margin-top:6px;color:var(--text-dim)"></div></div>
+        <div class="card kpi" id="kpi-metenox-card"><div class="label">Metenox Count</div><div class="value" id="kpi-metenox">—</div><div class="sub" id="kpi-metenox-sub">structures online</div></div>
+      </div>
+      <div id="overview-mining-line" style="font-size:0.8rem;color:var(--text-dim);margin-top:-8px;margin-bottom:16px"></div>
+
+      <div class="overview-glance mb-20" id="overview-glance" style="display:none">
+        <div class="card card-slim" id="overview-metenox-card">
+          <div class="card-slim-label">Metenox</div>
+          <div class="card-slim-value" id="overview-metenox-value">—</div>
+          <div class="card-slim-sub">ISK/mo</div>
+        </div>
+        <div class="card card-slim" id="overview-kills-card">
+          <div class="card-slim-label">Corp kills this month</div>
+          <div class="card-slim-value" id="overview-kills-value">—</div>
+          <div class="card-slim-sub" id="overview-kills-sub">ISK destroyed</div>
+        </div>
       </div>
 
       <div class="grid-2 mb-20">
@@ -101,8 +115,8 @@
         <div id="top-killers-list"><div class="loading"><span class="spinner"></span></div></div>
       </div>
 
-      <!-- CEO Notes + Upcoming Expiries + Dividend History -->
-      <div class="grid-3 mb-20" id="overview-bottom-row">
+      <!-- CEO Notes + Upcoming Expiries -->
+      <div class="grid-2 mb-20" id="overview-bottom-row">
         <div class="card">
           <div class="card-title">CEO Notes</div>
           <textarea id="scratchpad" rows="5" placeholder="Personal notes — auto-saved…"
@@ -112,10 +126,6 @@
         <div class="card" id="expiries-card">
           <div class="card-title">Upcoming Expiries</div>
           <div id="expiries-content"><div class="loading"><span class="spinner"></span></div></div>
-        </div>
-        <div class="card" id="dividends-card">
-          <div class="card-title">Payout History (FAT PAP)</div>
-          <div id="dividends-content"><div class="loading"><span class="spinner"></span></div></div>
         </div>
       </div>
     </div>

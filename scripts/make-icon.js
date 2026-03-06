@@ -1,22 +1,18 @@
 'use strict';
 /**
  * scripts/make-icon.js
- * Generates build/icon.ico (EVE-teal solid placeholder) using only Node.js
- * built-ins. Run automatically via the "predist" npm hook.
- *
- * To use a custom icon instead: simply place your own build/icon.ico in the
- * project before running "npm run dist" — this script is skipped when the
- * file already exists.
+ * Generates build/icon-placeholder.ico (EVE-teal solid). Run manually if you need a placeholder.
+ * For the EXE/installer, put your own icon as build/app.ico — the build uses that file (see package.json).
  */
 const fs   = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
-const OUT_PATH = path.join(__dirname, '..', 'build', 'icon.ico');
+const OUT_PATH = path.join(__dirname, '..', 'build', 'icon-placeholder.ico');
 
-// ── Skip if a hand-crafted icon is already present ───────────────────────────
+// ── Skip if placeholder already exists ─────────────────────────────────────────
 if (fs.existsSync(OUT_PATH)) {
-  console.log('[make-icon] build/icon.ico already exists — skipping generation.');
+  console.log('[make-icon] build/icon-placeholder.ico already exists — skipping.');
   process.exit(0);
 }
 
@@ -118,5 +114,5 @@ const ico   = buildICO(sizes, pngs);
 
 fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });
 fs.writeFileSync(OUT_PATH, ico);
-console.log(`[make-icon] Generated placeholder icon (${ico.length} bytes) → build/icon.ico`);
-console.log('[make-icon] Replace build/icon.ico with your custom icon before distributing.');
+console.log('[make-icon] Generated build/icon-placeholder.ico');
+console.log('[make-icon] For the app/installer icon, put your .ico as build/app.ico and run npm run dist.');

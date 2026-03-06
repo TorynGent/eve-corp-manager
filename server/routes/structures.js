@@ -67,7 +67,6 @@ router.get('/', requireAuth, (req, res) => {
       typeId:       s.type_id,
       typeName:     s.type_name,
       systemName:   s.system_name,
-      state:        s.state,
       services,
       fuelExpires:  s.fuel_expires,
       fuelDaysLeft: fuelDaysLeft !== null ? parseFloat(fuelDaysLeft.toFixed(1)) : null,

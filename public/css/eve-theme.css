@@ -126,6 +126,33 @@ main { padding: 24px; flex: 1; max-width: 1600px; width: 100%; margin: 0 auto; }
 .health-kpis-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 20px; }
 .mb-20 { margin-bottom: 20px; }
 
+/* ── Overview at-a-glance (slim cards) ──────────────────────────────────── */
+.overview-glance {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.card-slim {
+  padding: 12px 16px;
+}
+.card-slim .card-slim-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.card-slim .card-slim-value {
+  font-size: 1.12rem;
+  font-weight: 700;
+  color: var(--text-head);
+}
+.card-slim .card-slim-sub {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
 /* ── KPI Tiles ────────────────────────────────────────────────────────── */
 .kpi { display: flex; flex-direction: column; gap: 6px; }
 .kpi .label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); }
@@ -244,6 +271,7 @@ canvas { max-height: 280px; }
 }
 @media (max-width: 680px) {
   .grid-4, .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .overview-glance { grid-template-columns: 1fr; }
   main { padding: 16px; }
   nav  { padding: 0 12px; overflow-x: auto; }
   .health-kpis-grid { grid-template-columns: repeat(2, 1fr); }

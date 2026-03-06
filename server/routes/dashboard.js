@@ -56,6 +56,20 @@ router.get('/summary', requireAuth, (req, res) => {
   // Latest snapshot for equity
   const latestSnap = db.prepare('SELECT * FROM monthly_snapshots ORDER BY month DESC LIMIT 1').get();
 
+  // Mining this month (for overview at-a-glance)
+  const miningThisMonth = db.prepare(`
+    SELECT COUNT(DISTINCT main_name) AS pilots, COALESCE(SUM(quantity), 0) AS units
+    FROM mining_ledger WHERE substr(date, 1, 7) = ?
+  `).get(period);
+
+  // Kills this month (for overview at-a-glance)
+  const monthStart = period + '-01T00:00:00Z';
+  const monthEnd   = period === currentPeriod() ? new Date().toISOString() : nextMonthStart(period);
+  const killsThisMonthRow = db.prepare(`
+    SELECT COUNT(*) AS n, COALESCE(SUM(total_value), 0) AS isk
+    FROM corp_kills WHERE kill_time >= ? AND kill_time < ?
+  `).get(monthStart, monthEnd);
+
   res.json({
     corporationName:  token?.corporation_name || 'Your Corporation',
     walletBalance:    Math.round(walletTotal),
@@ -67,6 +81,10 @@ router.get('/summary', requireAuth, (req, res) => {
     metenoxCount,
     topTaxPayer:     topTax?.main_name || null,
     period,
+    miningPilotsThisMonth:  miningThisMonth?.pilots || 0,
+    miningUnitsThisMonth:   miningThisMonth?.units || 0,
+    killsThisMonth:        killsThisMonthRow?.n ?? 0,
+    iskDestroyedThisMonth:  killsThisMonthRow?.isk ?? 0,
   });
 });
 
@@ -89,26 +107,11 @@ router.post('/snapshots/create', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/dividends — last 6 FAT PAP payout periods (read-only from fat-pap-manager DB)
-router.get('/dividends', requireAuth, (req, res) => {
-  try {
-    const { app } = require('electron');
-    const fatPapDb = path.join(path.dirname(app.getPath('userData')), 'fat-pap-manager', 'data.db');
-    const Database = require('better-sqlite3');
-    const fpDb = new Database(fatPapDb, { readonly: true, fileMustExist: true });
-    try {
-      const periods = fpDb.prepare(
-        'SELECT id, start_date, end_date, income FROM pap_periods ORDER BY id DESC LIMIT 6'
-      ).all();
-      res.json({ available: true, periods });
-    } finally {
-      fpDb.close();
-    }
-  } catch {
-    res.json({ available: false });
-  }
-});
-
 function currentPeriod() { return new Date().toISOString().slice(0, 7); }
+function nextMonthStart(period) {
+  const [y, m] = period.split('-').map(Number);
+  const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+  return next + 'T00:00:00Z';
+}
 
 module.exports = router;

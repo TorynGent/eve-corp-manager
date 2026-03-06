@@ -87,7 +87,8 @@ router.get('/', requireAuth, (req, res) => {
     ).all().map(r => r.p),
   ];
 
-  res.json({ top10, recentKills: recent, totalKills: kills.length, period: reqPeriod || 'rolling30', periodLabel, periods });
+  const totalIskDestroyed = kills.reduce((s, k) => s + (k.total_value || 0), 0);
+  res.json({ top10, recentKills: recent, totalKills: kills.length, totalIskDestroyed, period: reqPeriod || 'rolling30', periodLabel, periods });
 });
 
 // GET /api/kills/history — per-period totals (kills count + ISK destroyed) for history chart

@@ -53,8 +53,6 @@ async function syncStructures(characterId, corpId) {
     for (const s of data) {
       const systemName = await resolveSystemName(s.system_id);
       const typeName   = await resolveTypeName(s.type_id);
-      // s.name comes directly from the authenticated corp structures endpoint — no extra ESI call needed.
-      // Falling back to resolveStructureName caused 401 errors (non-public structures) and wasted error budget.
       const name = s.name || await resolveStructureName(s.structure_id, characterId);
 
       db.prepare(`

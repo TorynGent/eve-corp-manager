@@ -11,7 +11,6 @@
     "security-check": "npm audit",
     "rebuild": "electron-builder install-app-deps",
     "make-icon": "node scripts/make-icon.js",
-    "predist": "node scripts/make-icon.js",
     "dist": "electron-builder --win",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -53,7 +52,7 @@
       }
     ],
     "win": {
-      "icon": "build/icon.ico",
+      "icon": "build/app.ico",
       "target": [
         {
           "target": "nsis",

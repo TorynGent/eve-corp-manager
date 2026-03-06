@@ -177,6 +177,18 @@ npm run dist
 ```
 Output: `dist/EVE-Corp-Manager-Setup-x.x.x.exe`
 
+**Changing the app icon before building**
+
+- **EXE and installer icon (Windows)**  
+  Put your icon file in the `build/` folder and name it **`app.ico`** (not `icon.ico`). The build reads `build/app.ico` (see `package.json` → `build.win.icon`). So: copy your .ico into `build/`, rename it to **app.ico**, then run `npm run dist`. Nothing in the project uses or overwrites `app.ico`.  
+  To get a placeholder first, run `npm run make-icon` — that creates `build/icon-placeholder.ico`; the installer still uses `app.ico` when present. Use a multi-size .ico (e.g. 16×16, 32×32, 48×48, 256×256) for best results.
+
+- **Tray icon (system tray)**  
+  The tray uses the image from `electron/icon.js`, which currently generates a solid teal square. To use your own image: add a PNG (e.g. `electron/icon.png`) and change `electron/icon.js` to load it, e.g.  
+  `module.exports = require('electron').nativeImage.createFromPath(require('path').join(__dirname, 'icon.png'));`
+
+Then run `npm run dist` as usual.
+
 ### Security check (dependencies)
 ```bash
 npm run security-check
