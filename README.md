@@ -12,7 +12,7 @@ A private, local-only corporation management dashboard for EVE Online. All data 
 4. Log in with your Director or CEO character via EVE SSO
 5. Data syncs automatically — no terminal, no browser, no setup
 
-> **First launch:** The app creates its config and database automatically in `%AppData%\eve-corp-manager\`. Nothing is written to the install folder.
+> **First launch:** The app creates its config and database automatically in `%AppData%\eve-corp-manager\`. Nothing is written to the install folder. Consider alt,main mappin in settings as your first step to get properly aggregated data (on main chars, not on every alt)
 
 > **Antivirus / Windows Defender may flag the installer or EXE** — Some antivirus software will report the installer or the app as a potential threat (e.g. "Unknown publisher", "Heuristic" or "Generic" detection). **The program is safe.** It is open-source and does not contain malware. Common reasons for false positives: (1) the app is **not code-signed** (no paid certificate from a CA), so Windows and AV vendors treat it as "unknown"; (2) **Electron** apps bundle Node.js and native code, which can trigger heuristic scans; (3) new or rarely-downloaded executables often lack a "reputation" score. You can add an exclusion for the install folder or the downloaded installer, or choose "Run anyway" / "More info → Run anyway" when Windows warns. Builds are produced locally via `npm run dist`; the source is on GitHub for review.
 
@@ -23,13 +23,13 @@ A private, local-only corporation management dashboard for EVE Online. All data 
 | Tab | What it shows |
 |-----|---------------|
 | **Overview** | KPI summary — wallet, fuel status, recent kills, top taxpayers; dashboard load errors show a retry banner |
-| **Structures** | Fuel days remaining, gas stock, alerts for low fuel/gas; fuel overrides and manual gas data (Metenox); manual location names |
+| **Structures** | Fuel days remaining, gas stock, alerts for low fuel/gas; fuel overrides and manual gas data (Metenox); manual location names for stock stations |
 | **Metenox** | Moon drill profitability vs live Jita prices, manual material entry |
 | **Wallet & Tax** | Corp wallet journal (search + Enter), taxpayer leaderboard (alt-aggregated), CSV export |
 | **Mining** | Mining ledger by member/main, monthly totals, period presets (This month / Last month), CSV export |
 | **Corp Kills** | Kill rankings (rolling 30-day + monthly), ISK destroyed, period presets |
-| **Member Health** | PAP-style weights, fat-PAP overrides; responsive KPI grid |
-| **Settings** | Sync status, backup & restore, email & Discord notifications, **Display** (color-blind mode), corp rates, scratchpad, fuel hangar, alt→main mappings (at bottom) |
+| **Member Health** | Kill, Mining, tax, login weights for activity tracking, Fleet Points addable; responsive KPI grid |
+| **Settings** | Sync status, backup & restore, email & Discord notifications, **Display** (color-blind mode), corp rates, fuel hangar selector, alt→main mappings (at bottom) |
 
 **UX & accessibility**
 - **Color-blind friendly mode** — Settings → Display. Uses blue/orange/magenta palette for charts and indicators; applies to all built-in charts (kills, Metenox, dashboard).
