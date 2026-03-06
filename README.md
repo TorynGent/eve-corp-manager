@@ -76,8 +76,18 @@ Callback URL: `http://localhost:3000/auth/callback`
 Configure in **Settings → Email Notifications**:
 - Enter SMTP server, port, username, password
 - For Gmail: use an [App Password](https://support.google.com/accounts/answer/185833), not your regular password
-- Set fuel and gas alert thresholds
+- Set **Fuel Block Alert Threshold** (days) and **Magmatic Gas Alert Threshold** (days)
+- Enter **Recipients** (comma- or semicolon-separated email addresses)
+- Optionally set **From Address** (e.g. `EVE Corp Dashboard <noreply@example.com>`)
 - Click **Send Test Email** to verify
+
+**How it works**
+- The app runs an **alert check once per day at 08:00 UTC** (see “What syncs automatically”).
+- For each corp structure it compares **fuel days remaining** to your fuel threshold and **magmatic gas days** (Metenox only) to your gas threshold. If either is at or below the threshold, that structure is added to the day’s alert list.
+- All qualifying structures are sent in **one digest email** with a table: structure name, system, type (Fuel Blocks or Magmatic Gas), days left, and expiry date.
+- The same structure and alert type (fuel or gas) is **not re-sent within 24 hours** — so you get at most one email per structure per issue per day.
+- You can **turn notifications off** without clearing SMTP settings (Settings → Email Notifications).
+- Recent sent alerts appear under **Recent Alerts Sent** in the same panel.
 
 > **Security:** Your SMTP password is encrypted at rest using Windows DPAPI (tied to your Windows user account). It is never stored in plaintext.
 

@@ -87,16 +87,28 @@ async function esiGetAll(path, options = {}) {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const res = await axios.get(url, { params, headers, validateStatus: s => s < 500 });
+    const res = await axios.get(url, { params, headers, validateStatus: s => s < 600 });
     if (res.status === 200) {
       results = results.concat(res.data);
       const totalPages = parseInt(res.headers['x-pages'] || '1', 10);
       if (page >= totalPages) break;
       page++;
     } else if (res.status === 304) {
+      // No new data on this page — shouldn't happen without If-None-Match, but handle gracefully
+      break;
+    } else if (res.status === 429) {
+      const wait = parseInt(res.headers['retry-after'] || '10', 10) * 1000;
+      console.warn(`[ESI] esiGetAll rate-limited on ${path} page ${page} — retrying after ${wait / 1000}s`);
+      await sleep(wait);
+      // Don't increment page — retry the same page
+    } else if (res.status === 404) {
+      // ESI returns 404 for endpoints with no data (e.g. corp mining ledger with no recent
+      // activity). Treat as empty result rather than an error.
       break;
     } else {
-      break;
+      // Other 4xx/5xx — log clearly so we can diagnose failures (e.g. scope issues = 403)
+      console.warn(`[ESI] esiGetAll got ${res.status} on ${path} page ${page} — aborting pagination`);
+      throw new Error(`ESI ${res.status} on ${path}`);
     }
   }
   return results;
@@ -134,11 +146,18 @@ async function resolveNames(ids) {
 /** Resolve a single structure name (requires auth) */
 async function resolveStructureName(structureId, characterId) {
   const cached = getCachedName(structureId);
+  // cached.name === '' means a previous attempt got 401/403 — skip retrying
   if (cached) return cached.name;
   try {
     const data = await esiGet(`/universe/structures/${structureId}/`, { characterId });
     if (data?.name) { cacheName(structureId, data.name, 'structure'); return data.name; }
-  } catch { /* station or inaccessible */ }
+  } catch (err) {
+    // 401/403: ESI access disabled by owning corp, or character lacks ESI docking rights.
+    // Cache empty string so we don't retry every page load (burns error budget).
+    // Use ✏️ rename button to set a manual name; clearing name_cache triggers fresh resolve.
+    console.warn(`[ESI] Structure ${structureId} inaccessible via ESI (${err.status || err.message}) — use ✏️ to name manually`);
+    cacheName(structureId, '', 'failed');
+  }
   return `Structure ${structureId}`;
 }
 

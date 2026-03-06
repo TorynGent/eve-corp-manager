@@ -141,6 +141,22 @@ router.put('/scratchpad', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Fuel Hangar ────────────────────────────────────────────────────────────────
+
+// GET /api/settings/fuel-hangar
+router.get('/fuel-hangar', requireAuth, (req, res) => {
+  res.json({ fuelHangar: getSetting('fuel_hangar', 'CorpSAG3') });
+});
+
+// PUT /api/settings/fuel-hangar
+router.put('/fuel-hangar', requireAuth, (req, res) => {
+  const { fuelHangar } = req.body;
+  const valid = ['CorpSAG1','CorpSAG2','CorpSAG3','CorpSAG4','CorpSAG5','CorpSAG6','CorpSAG7'];
+  if (!valid.includes(fuelHangar)) return res.status(400).json({ error: 'Invalid hangar' });
+  setSetting('fuel_hangar', fuelHangar);
+  res.json({ ok: true });
+});
+
 // ── CSV Alt→Main Import ────────────────────────────────────────────────────────
 
 // POST /api/settings/mappings/csv — import alt→main from CSV text

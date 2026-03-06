@@ -50,8 +50,8 @@ CREATE TABLE IF NOT EXISTS structure_gas (
 );
 
 CREATE TABLE IF NOT EXISTS wallet_journal (
-  journal_id       INTEGER PRIMARY KEY,
-  division         INTEGER,
+  journal_id       INTEGER NOT NULL,
+  division         INTEGER NOT NULL,
   date             TEXT,
   ref_type         TEXT,
   first_party_id   INTEGER,
@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS wallet_journal (
   amount           REAL,
   balance          REAL,
   description      TEXT,
-  synced_at        INTEGER
+  synced_at        INTEGER,
+  PRIMARY KEY (journal_id, division)
 );
 
 CREATE INDEX IF NOT EXISTS idx_wj_date        ON wallet_journal(date);
@@ -206,6 +207,46 @@ CREATE TABLE IF NOT EXISTS metenox_manual_materials (
 // Schema migrations (add columns added after initial deploy)
 try { db.exec('ALTER TABLE market_prices ADD COLUMN jita_buy_max REAL'); } catch {}
 try { db.exec('ALTER TABLE assets ADD COLUMN location_flag TEXT'); } catch {}
+
+// Migrate wallet_journal PRIMARY KEY: journal_id → (journal_id, division)
+// EVE uses the same journal_id for BOTH sides of an inter-division transfer
+// (debit in source division, credit in destination). The old single-column PK
+// caused INSERT OR IGNORE to silently drop the credit side, so destination
+// division journals appeared empty even after a full sync.
+{
+  const wjCols = db.prepare('PRAGMA table_info(wallet_journal)').all();
+  const divisionPkPos = wjCols.find(c => c.name === 'division')?.pk || 0;
+  if (divisionPkPos === 0) {
+    console.log('[DB] Migrating wallet_journal to composite PRIMARY KEY (journal_id, division)…');
+    db.exec(`
+      BEGIN;
+      CREATE TABLE wallet_journal_new (
+        journal_id       INTEGER NOT NULL,
+        division         INTEGER NOT NULL,
+        date             TEXT,
+        ref_type         TEXT,
+        first_party_id   INTEGER,
+        second_party_id  INTEGER,
+        amount           REAL,
+        balance          REAL,
+        description      TEXT,
+        synced_at        INTEGER,
+        PRIMARY KEY (journal_id, division)
+      );
+      INSERT OR IGNORE INTO wallet_journal_new SELECT * FROM wallet_journal;
+      DROP TABLE wallet_journal;
+      ALTER TABLE wallet_journal_new RENAME TO wallet_journal;
+      COMMIT;
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_wj_date        ON wallet_journal(date);
+      CREATE INDEX IF NOT EXISTS idx_wj_second_party ON wallet_journal(second_party_id);
+      CREATE INDEX IF NOT EXISTS idx_wj_ref_type     ON wallet_journal(ref_type);
+      CREATE INDEX IF NOT EXISTS idx_wj_division     ON wallet_journal(division);
+    `);
+    console.log('[DB] wallet_journal migration complete — run a Full Sync to backfill missing inter-division entries.');
+  }
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

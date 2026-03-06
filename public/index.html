@@ -29,7 +29,7 @@
       Login with EVE Online
     </a>
     <div class="login-scopes">
-      <strong style="color:#c5d5e8">Required ESI permissions (6 scopes):</strong>
+      <strong style="color:#c5d5e8">Required ESI permissions:</strong>
       <ul style="list-style:none;padding-left:0;margin-top:8px;line-height:1.9">
         <li>✓ <code>esi-wallet.read_corporation_wallets.v1</code> — wallet &amp; tax data</li>
         <li>✓ <code>esi-corporations.read_structures.v1</code> — structures &amp; fuel</li>
@@ -209,34 +209,24 @@
       <div id="pnl-section" class="mb-20">
         <div class="grid-3 mb-20" id="pnl-kpis">
           <div class="card kpi">
-            <div class="label">Real Income</div>
+            <div class="label">Corp Income</div>
             <div class="value" id="pnl-income" style="color:var(--green)">—</div>
-            <div class="sub" id="pnl-period-label">excl. inter-division</div>
+            <div class="sub" id="pnl-period-label">external credits, all divisions</div>
           </div>
           <div class="card kpi">
-            <div class="label">Real Expenses</div>
+            <div class="label">Corp Expenses</div>
             <div class="value" id="pnl-expenses" style="color:var(--red)">—</div>
-            <div class="sub">excl. inter-division</div>
+            <div class="sub">ISK leaving the corp</div>
           </div>
           <div class="card kpi">
-            <div class="label">Net Flow</div>
+            <div class="label">Net</div>
             <div class="value" id="pnl-net">—</div>
-            <div class="sub" id="pnl-net-sub">external only</div>
+            <div class="sub" id="pnl-net-sub">income − expenses</div>
           </div>
         </div>
-        <div class="grid-3" id="pnl-accounts">
-          <div class="card">
-            <div class="card-title" style="font-size:0.78rem">Division 1 — Master Wallet</div>
-            <div id="pnl-div1"><div class="loading"><span class="spinner"></span></div></div>
-          </div>
-          <div class="card">
-            <div class="card-title" style="font-size:0.78rem">Division 2 — Equity</div>
-            <div id="pnl-div2"><div class="loading"><span class="spinner"></span></div></div>
-          </div>
-          <div class="card">
-            <div class="card-title" style="font-size:0.78rem">Division 3 — Profit</div>
-            <div id="pnl-div3"><div class="loading"><span class="spinner"></span></div></div>
-          </div>
+        <!-- Division cards rendered dynamically by renderPnl() — auto-fit for 1–7 divisions -->
+        <div id="pnl-accounts" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">
+          <div class="loading"><span class="spinner"></span></div>
         </div>
       </div>
 
@@ -414,6 +404,28 @@
             <button class="btn btn-primary btn-small" id="btn-full-sync">⟳ Full Sync Now</button>
             <button class="btn btn-ghost btn-small" id="btn-manual-snapshot">📸 Create Snapshot</button>
           </div>
+        </div>
+      </div>
+
+      <!-- Corp Fuel Hangar -->
+      <div class="card mb-20">
+        <div class="card-title">Corp Fuel &amp; Gas Hangar</div>
+        <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:14px;line-height:1.5">
+          Select the corp hangar (CorpSAG1–7) where your corp stores its fuel blocks and magmatic gas.
+          This determines what appears in the Structures tab stock inventory.
+        </p>
+        <div style="display:flex;align-items:center;gap:12px">
+          <select id="fuel-hangar-select" class="form-select" style="width:160px">
+            <option value="CorpSAG1">Hangar 1 (CorpSAG1)</option>
+            <option value="CorpSAG2">Hangar 2 (CorpSAG2)</option>
+            <option value="CorpSAG3" selected>Hangar 3 (CorpSAG3)</option>
+            <option value="CorpSAG4">Hangar 4 (CorpSAG4)</option>
+            <option value="CorpSAG5">Hangar 5 (CorpSAG5)</option>
+            <option value="CorpSAG6">Hangar 6 (CorpSAG6)</option>
+            <option value="CorpSAG7">Hangar 7 (CorpSAG7)</option>
+          </select>
+          <button class="btn btn-primary btn-small" id="btn-save-fuel-hangar">Save</button>
+          <span id="fuel-hangar-feedback"></span>
         </div>
       </div>
 

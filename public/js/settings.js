@@ -277,9 +277,31 @@ document.getElementById('btn-save-health-weights')?.addEventListener('click', as
   }
 });
 
+// ── Fuel Hangar ───────────────────────────────────────────────────────────────
+async function loadFuelHangar() {
+  try {
+    const { fuelHangar } = await api.get('/api/settings/fuel-hangar');
+    const sel = document.getElementById('fuel-hangar-select');
+    if (sel && fuelHangar) sel.value = fuelHangar;
+  } catch (err) { console.error('Fuel hangar load error:', err); }
+}
+
+document.getElementById('btn-save-fuel-hangar')?.addEventListener('click', async () => {
+  const fb  = document.getElementById('fuel-hangar-feedback');
+  const sel = document.getElementById('fuel-hangar-select');
+  try {
+    await api.put('/api/settings/fuel-hangar', { fuelHangar: sel.value });
+    fb.innerHTML = '<span class="alert alert-ok" style="padding:2px 8px">Saved</span>';
+    setTimeout(() => { fb.innerHTML = ''; }, 2500);
+  } catch (err) {
+    fb.innerHTML = `<span class="alert alert-error" style="padding:2px 8px">${esc(err.message)}</span>`;
+  }
+});
+
 function loadSettings() {
   loadMappings();
   loadSyncStatus();
   loadHealthWeights();
   loadNotificationSettings();
+  loadFuelHangar();
 }

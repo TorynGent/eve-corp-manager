@@ -2,14 +2,15 @@
 const express = require('express');
 const router  = express.Router();
 const { requireAuth } = require('../auth');
-const { db }          = require('../db');
+const { db, getSetting } = require('../db');
+const { resolveStructureName } = require('../esi');
 
 const METENOX_TYPE_ID  = 81826;
 
-// Corp hangar that holds fuel blocks + magmatic gas stock.
-// ESI uses CorpSAG1–CorpSAG7 for the 7 corp divisions; hangar names are set in-game
-// but NOT exposed via ESI. Change this if your fuel hangar is a different division.
-const FUEL_GAS_HANGAR  = 'CorpSAG3'; // 3rd hangar — "Ressources - Rohstoffe"
+// ESI uses CorpSAG1–CorpSAG7 for the 7 corp hangar divisions.
+// In-game hangar names are set by the CEO but are NOT exposed via the ESI scope we hold.
+// We scan ALL CorpSAG hangars so this works out-of-the-box for any corp regardless of
+// which hangar they use for fuel/gas storage.
 
 // GET /api/structures — return all synced structures with fuel/gas calculations
 router.get('/', requireAuth, (req, res) => {
@@ -136,7 +137,7 @@ router.put('/:id/gas', requireAuth, (req, res) => {
 });
 
 // GET /api/structures/inventory — gas + fuel block stocks across all corp hangars
-router.get('/inventory', requireAuth, (req, res) => {
+router.get('/inventory', requireAuth, async (req, res) => {
   const FUEL_IDS        = [4051, 4246, 4247, 4312]; // Caldari/Gallente/Amarr/Minmatar Fuel Blocks
   const GAS_TYPE_ID     = 81143; // Magmatic Gas
   const metenoxCount    = db.prepare('SELECT COUNT(*) AS c FROM structures WHERE type_id = ?').get(METENOX_TYPE_ID).c;
@@ -177,18 +178,56 @@ router.get('/inventory', requireAuth, (req, res) => {
       return { structure_name: cached.name, system_name: '' };
     }
 
-    // 3. Completely unknown
+    // 3. Try the location_name stored in the assets table during the last sync
+    const assetLoc = db.prepare(
+      `SELECT MAX(location_name) AS ln FROM assets WHERE location_id = ?`
+    ).get(locationId);
+    if (assetLoc?.ln && !assetLoc.ln.startsWith('Loc ')) {
+      return { structure_name: assetLoc.ln, system_name: '' };
+    }
+
+    // 4. Completely unknown — will resolve on next asset sync
     return { structure_name: `Loc ${locationId}`, system_name: '' };
   }
 
-  // Gas in the designated fuel/gas hangar only (CorpSAG3 by default)
+  // Configured corp fuel/gas hangar (default CorpSAG3; user-configurable in Settings)
+  const fuelHangar = getSetting('fuel_hangar', 'CorpSAG3');
+
+  // Gas in the configured corp hangar
   const gasRaw = db.prepare(`
     SELECT location_id, SUM(quantity) AS qty
     FROM assets
     WHERE type_id = ?
       AND location_flag = ?
     GROUP BY location_id
-  `).all(GAS_TYPE_ID, FUEL_GAS_HANGAR);
+  `).all(GAS_TYPE_ID, fuelHangar);
+
+  // Fuel blocks in the configured corp hangar
+  const ph      = FUEL_IDS.map(() => '?').join(',');
+  const fuelRaw = db.prepare(`
+    SELECT type_id, type_name, location_id, SUM(quantity) AS qty
+    FROM assets
+    WHERE type_id IN (${ph})
+      AND location_flag = ?
+    GROUP BY type_id, location_id
+  `).all(...FUEL_IDS, fuelHangar);
+
+  // Resolve names for any alliance/other-corp structures not yet in name_cache.
+  // resolveStructureName checks the DB cache first — only hits ESI for truly unknown IDs.
+  // This runs at request time so the UI is up-to-date even if the scheduled sync hasn't run yet.
+  const characterId = req.session.characterId;
+  const allLocIds = [...new Set([
+    ...gasRaw.map(r => r.location_id),
+    ...fuelRaw.map(r => r.location_id),
+  ])];
+  for (const locId of allLocIds) {
+    if (!structureMap[String(locId)]) {
+      const cached = db.prepare('SELECT name FROM name_cache WHERE id = ?').get(locId);
+      if (!cached?.name) {
+        await resolveStructureName(locId, characterId).catch(() => {});
+      }
+    }
+  }
 
   const gasRows = gasRaw
     .map(r => ({ location_id: r.location_id, qty: r.qty, ...locLabel(r.location_id) }))
@@ -197,16 +236,6 @@ router.get('/inventory', requireAuth, (req, res) => {
   const totalGas         = gasRows.reduce((s, r) => s + r.qty, 0);
   const gasConsumPerHour = 200 * metenoxCount;
   const gasHoursLeft     = gasConsumPerHour > 0 && totalGas > 0 ? totalGas / gasConsumPerHour : null;
-
-  // Fuel blocks in the designated fuel/gas hangar only (CorpSAG3 by default)
-  const ph      = FUEL_IDS.map(() => '?').join(',');
-  const fuelRaw = db.prepare(`
-    SELECT type_id, type_name, location_id, SUM(quantity) AS qty
-    FROM assets
-    WHERE type_id IN (${ph})
-      AND location_flag = ?
-    GROUP BY type_id, location_id
-  `).all(...FUEL_IDS, FUEL_GAS_HANGAR);
 
   const fuelRows = fuelRaw
     .map(r => ({
@@ -223,6 +252,7 @@ router.get('/inventory', requireAuth, (req, res) => {
   const fuelHoursLeft     = fuelConsumPerHour > 0 && totalFuel > 0 ? totalFuel / fuelConsumPerHour : null;
 
   res.json({
+    fuelHangar,
     gas: {
       rows:              gasRows,
       total:             totalGas,

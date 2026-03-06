@@ -99,14 +99,19 @@ async function syncWallet(characterId, corpId) {
 
     let totalInserted = 0;
     for (let div = 1; div <= 7; div++) {
-      const entries = await esiGetAll(`/corporations/${corpId}/wallets/${div}/journal/`, { characterId });
-      const rows = entries.map(e => [
-        e.id, div, e.date, e.ref_type, e.first_party_id ?? null,
-        e.second_party_id ?? null, e.amount, e.balance ?? null,
-        e.description ?? null, Math.floor(Date.now() / 1000),
-      ]);
-      insertMany(rows);
-      totalInserted += rows.length;
+      try {
+        const entries = await esiGetAll(`/corporations/${corpId}/wallets/${div}/journal/`, { characterId });
+        const rows = entries.map(e => [
+          e.id, div, e.date, e.ref_type, e.first_party_id ?? null,
+          e.second_party_id ?? null, e.amount, e.balance ?? null,
+          e.description ?? null, Math.floor(Date.now() / 1000),
+        ]);
+        insertMany(rows);
+        totalInserted += rows.length;
+        if (entries.length > 0) console.log(`[Sync] Wallet div ${div}: ${entries.length} entries from ESI`);
+      } catch (divErr) {
+        console.error(`[Sync] Wallet div ${div} error: ${divErr.message}`);
+      }
     }
 
     // Sync current wallet balances from the dedicated endpoint.
@@ -119,6 +124,21 @@ async function syncWallet(characterId, corpId) {
     }
     if (walletBalances.length) {
       console.log(`[Sync] Wallet balances: ${walletBalances.map(b => `Div${b.division}=${(b.balance/1e9).toFixed(2)}B`).join(' | ')}`);
+    }
+
+    // Resolve names for external corp/character IDs in corp_account_withdrawal entries.
+    // /universe/names/ handles corps, characters, alliances — no extra scope needed.
+    // This caches names so P&L shows "Transfer Out To Invidia Administrative" not "Corp 12345".
+    const externalIds = db.prepare(`
+      SELECT DISTINCT second_party_id FROM wallet_journal
+      WHERE ref_type = 'corporation_account_withdrawal'
+        AND second_party_id IS NOT NULL
+        AND second_party_id != ?
+    `).all(corpId).map(r => r.second_party_id);
+    const uncached = externalIds.filter(id => !getCachedName(id));
+    if (uncached.length) {
+      await resolveNames(uncached).catch(() => {});
+      console.log(`[Sync] Wallet: resolved ${uncached.length} external corp/char name(s)`);
     }
 
     // Rebuild tax summary for current period

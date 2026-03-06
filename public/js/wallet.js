@@ -153,7 +153,7 @@ async function loadPnl() {
 }
 
 function renderPnl(data) {
-  // Consolidated KPI tiles — real income/expenses (inter-division excluded)
+  // Consolidated KPI tiles
   const c        = data.consolidated;
   const netColor = c.realNet >= 0 ? 'var(--green)' : 'var(--red)';
   const netSign  = c.realNet >= 0 ? '+' : '';
@@ -163,13 +163,21 @@ function renderPnl(data) {
   netEl.textContent = netSign + fmtISK(c.realNet) + ' ISK';
   netEl.style.color = netColor;
   document.getElementById('pnl-period-label').textContent = data.period;
-  document.getElementById('pnl-net-sub').textContent = 'external only';
 
-  // Per-division T-account cards
-  for (const div of [1, 2, 3]) {
-    const el = document.getElementById(`pnl-div${div}`);
-    if (el) el.innerHTML = renderPnlDivision(data.divisions[div]);
+  // Per-division T-account cards — dynamically rendered for however many divisions are active
+  const accountsEl = document.getElementById('pnl-accounts');
+  const divKeys = Object.keys(data.divisions).map(Number).sort((a, b) => a - b);
+  if (!divKeys.length) {
+    accountsEl.innerHTML = '<p class="empty">No wallet activity this period.</p>';
+    return;
   }
+  accountsEl.innerHTML = divKeys.map(divNum => {
+    const div = data.divisions[divNum];
+    return `<div class="card">
+      <div class="card-title" style="font-size:0.78rem">${esc(div.name)}</div>
+      ${renderPnlDivision(div)}
+    </div>`;
+  }).join('');
 }
 
 /** Render a single-division T-account view (external + internal separated). */

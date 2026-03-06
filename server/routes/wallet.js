@@ -2,7 +2,7 @@
 const express = require('express');
 const router  = express.Router();
 const { requireAuth } = require('../auth');
-const { db, getSetting } = require('../db');
+const { db, getSetting, getToken } = require('../db');
 
 // Ref types we count as "tax-generating" income from members.
 // Deliberately excludes: transaction_tax (corp's own broker fees — expense),
@@ -212,68 +212,108 @@ router.get('/pnl', requireAuth, (req, res) => {
  * GET /api/wallet/multi-pnl?period=YYYY-MM
  * T-account style P&L for wallet divisions 1, 2, 3.
  *
- * "corporation_account_withdrawal" is EVE's ref_type for BOTH sides of an
- * inter-division transfer (debit in source, credit in destination).
- * It is NOT a real external expense. We keep it visible in each division card
- * but exclude it from the consolidated "real P&L" totals.
+ * corporation_account_withdrawal comes in two flavours:
+ *   • second_party_id = own corpId  → inter-division transfer (not a real P&L event)
+ *   • second_party_id = another corp → ISK leaving the corporation (e.g. alliance tax) → REAL EXPENSE
  *
- * Real income   = external credits (excl. inter-div types)
- * Real expenses = external debits  (excl. inter-div types)
+ * Each withdrawal is examined individually so the two cases are separated correctly
+ * and individual transfers are shown as separate rows rather than lumped together.
  */
-const INTER_DIV_TYPES = new Set(['corporation_account_withdrawal']);
-
 router.get('/multi-pnl', requireAuth, (req, res) => {
   const period = req.query.period || new Date().toISOString().slice(0, 7);
-
-  const DIVISION_NAMES = {
-    1: 'Division 1 — Master',
-    2: 'Division 2 — Equity',
-    3: 'Division 3 — Profit',
-  };
+  const token  = getToken(req.session.characterId);
+  const corpId = token?.corporation_id ?? null;
 
   const divisions = {};
   let realIncomeTotal  = 0;
   let realExpenseTotal = 0;
 
-  for (const div of [1, 2, 3]) {
-    const rows = db.prepare(`
+  for (let div = 1; div <= 7; div++) {
+    // ── 1. All non-withdrawal ref_types — aggregate by ref_type as before ──
+    const regularRows = db.prepare(`
       SELECT ref_type,
              SUM(CASE WHEN amount > 0 THEN amount      ELSE 0 END) AS credits,
              SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) AS debits,
              COUNT(*) AS cnt
       FROM wallet_journal
       WHERE division = ? AND date LIKE ?
+        AND ref_type != 'corporation_account_withdrawal'
       GROUP BY ref_type
       HAVING credits > 0 OR debits > 0
       ORDER BY (credits + debits) DESC
     `).all(div, period + '%');
 
-    const external = rows.filter(r => !INTER_DIV_TYPES.has(r.ref_type));
-    const internal = rows.filter(r =>  INTER_DIV_TYPES.has(r.ref_type));
+    // ── 2. corporation_account_withdrawal — one row per individual entry ──
+    // This lets us classify each transfer as internal (same corp) or external
+    // (different corp = real ISK leaving the corporation, e.g. alliance tax).
+    const withdrawals = db.prepare(`
+      SELECT second_party_id, amount
+      FROM wallet_journal
+      WHERE division = ? AND date LIKE ?
+        AND ref_type = 'corporation_account_withdrawal'
+      ORDER BY ABS(amount) DESC
+    `).all(div, period + '%');
 
-    const extIn  = external.reduce((s, r) => s + r.credits, 0);
-    const extOut = external.reduce((s, r) => s + r.debits,  0);
-    const intIn  = internal.reduce((s, r) => s + r.credits, 0);
-    const intOut = internal.reduce((s, r) => s + r.debits,  0);
+    const externalCredits = regularRows
+      .filter(r => r.credits > 0)
+      .map(r => ({ refType: r.ref_type, total: r.credits, count: r.cnt }));
+
+    const externalDebits = regularRows
+      .filter(r => r.debits > 0)
+      .map(r => ({ refType: r.ref_type, total: r.debits, count: r.cnt }));
+
+    const internalCredits = [];
+    const internalDebits  = [];
+
+    for (const w of withdrawals) {
+      const isInternal = corpId
+        ? (w.second_party_id === corpId || w.second_party_id === null)
+        : w.second_party_id === null;
+
+      if (isInternal) {
+        // ISK moving between our own divisions — not a real P&L event
+        const entry = { refType: 'inter_division_transfer', total: Math.abs(w.amount), count: 1 };
+        if (w.amount >= 0) internalCredits.push(entry);
+        else               internalDebits.push(entry);
+      } else {
+        // ISK leaving the corporation — real expense / income
+        const nameRow = db.prepare('SELECT name FROM name_cache WHERE id = ?').get(w.second_party_id);
+        const who     = nameRow?.name ?? `Corp ${w.second_party_id}`;
+        const label   = w.amount < 0 ? `transfer_out_to_${who}` : `transfer_in_from_${who}`;
+        const entry   = { refType: label, total: Math.abs(w.amount), count: 1 };
+        if (w.amount >= 0) externalCredits.push(entry);
+        else               externalDebits.push(entry);
+      }
+    }
+
+    // Sort external lists largest first
+    externalCredits.sort((a, b) => b.total - a.total);
+    externalDebits.sort((a, b)  => b.total - a.total);
+
+    const extIn  = externalCredits.reduce((s, r) => s + r.total, 0);
+    const extOut = externalDebits.reduce((s, r)  => s + r.total, 0);
+    const intIn  = internalCredits.reduce((s, r) => s + r.total, 0);
+    const intOut = internalDebits.reduce((s, r)  => s + r.total, 0);
 
     realIncomeTotal  += extIn;
     realExpenseTotal += extOut;
 
-    // Current live balance from last wallet sync (stored by scheduler)
     const balanceSetting = getSetting(`wallet_balance_${div}`);
     const currentBalance = balanceSetting !== null ? parseFloat(balanceSetting) : null;
 
+    // Skip divisions with no activity this period and a zero (or unknown) balance
+    const hasActivity = externalCredits.length || externalDebits.length ||
+                        internalCredits.length || internalDebits.length;
+    if (!hasActivity && !currentBalance) continue;
+
     divisions[div] = {
-      name:            DIVISION_NAMES[div] || `Division ${div}`,
+      name: `Division ${div}`,
       currentBalance,
-      externalCredits: external.filter(r => r.credits > 0).map(r => ({ refType: r.ref_type, total: r.credits, count: r.cnt })),
-      externalDebits:  external.filter(r => r.debits  > 0).map(r => ({ refType: r.ref_type, total: r.debits,  count: r.cnt })),
-      internalCredits: internal.filter(r => r.credits > 0).map(r => ({ refType: r.ref_type, total: r.credits, count: r.cnt })),
-      internalDebits:  internal.filter(r => r.debits  > 0).map(r => ({ refType: r.ref_type, total: r.debits,  count: r.cnt })),
-      extIn,
-      extOut,
-      intIn,
-      intOut,
+      externalCredits,
+      externalDebits,
+      internalCredits,
+      internalDebits,
+      extIn, extOut, intIn, intOut,
       net: extIn - extOut + intIn - intOut,
     };
   }

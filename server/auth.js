@@ -1,7 +1,7 @@
 'use strict';
 const axios  = require('axios');
 const crypto = require('crypto');
-const { saveToken, getToken, updateAccessToken } = require('./db');
+const { db, saveToken, getToken, updateAccessToken } = require('./db');
 
 const SSO_BASE  = 'https://login.eveonline.com';
 const TOKEN_URL = `${SSO_BASE}/v2/oauth/token`;
@@ -14,6 +14,7 @@ const REQUIRED_SCOPES = [
   'esi-corporations.track_members.v1',
   'esi-industry.read_corporation_mining.v1',
   'esi-assets.read_corporation_assets.v1',
+  'esi-universe.read_structures.v1',  // resolve alliance/other-corp structure names
 ];
 
 const SCOPES = REQUIRED_SCOPES.join(' ');
@@ -146,6 +147,10 @@ async function verifyAndSave(tokenData) {
     expires_at:      expiresAt,
     scopes:          jwt.scp ? (Array.isArray(jwt.scp) ? jwt.scp.join(' ') : jwt.scp) : '',
   });
+
+  // Clear any previously-cached failed structure resolutions so they get retried
+  // with the potentially-updated scope set (e.g. after adding esi-universe.read_structures.v1).
+  db.prepare("DELETE FROM name_cache WHERE type = 'failed'").run();
 
   const grantedScopes = jwt.scp ? (Array.isArray(jwt.scp) ? jwt.scp : [jwt.scp]) : [];
   return { charId, charName, corpId, corpName, grantedScopes };

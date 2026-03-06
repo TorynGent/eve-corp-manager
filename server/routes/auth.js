@@ -94,6 +94,7 @@ router.get('/me', (req, res) => {
     characterName:   req.session.characterName,
     corporationId:   req.session.corporationId,
     corporationName: token?.corporation_name || null,
+    scopes:          token?.scopes || null,
   });
 });
 

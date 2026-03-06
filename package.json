@@ -1,6 +1,6 @@
 {
   "name": "eve-corp-manager",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "EVE Online Corporation Management Dashboard — live ESI data",
   "author": "Cray Rayner / Toryn Gent",
   "main": "electron/main.js",
