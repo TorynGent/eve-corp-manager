@@ -45,6 +45,7 @@
     try {
       const display = await api.get('/api/settings/display');
       appEl.classList.toggle('color-blind-mode', !!display.colorBlindMode);
+      if (typeof window !== 'undefined') window.__dateFormat = display.dateFormat || 'eu';
     } catch (_) {}
 
     // Header — use real EVE corp logo image, fall back to initials if it fails

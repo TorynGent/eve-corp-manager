@@ -1,5 +1,7 @@
 # EVE Corp Manager
 
+Hi! Mostly Vibe Coded this App with Claude Code and Cursor. Was intended for the management of my own corp but I thought might as well build it in a way that others could benefit too. So here it is.
+
 A private, local-only corporation management dashboard for EVE Online. All data stays on your machine — nothing is sent anywhere except to ESI (esi.evetech.net), your SMTP server if you configure email alerts, and optionally a Discord webhook for structure alerts.
 
 ---
@@ -12,7 +14,7 @@ A private, local-only corporation management dashboard for EVE Online. All data 
 4. Log in with your Director or CEO character via EVE SSO
 5. Data syncs automatically — no terminal, no browser, no setup
 
-> **First launch:** The app creates its config and database automatically in `%AppData%\eve-corp-manager\`. Nothing is written to the install folder. Consider alt,main mappin in settings as your first step to get properly aggregated data (on main chars, not on every alt)
+> **First launch:** The app creates its config and database automatically in `%AppData%\eve-corp-manager\`. Nothing is written to the install folder. Consider alt,main mapping in settings as your first step to get properly aggregated data (on main chars, not on every alt)
 
 > **Antivirus / Windows Defender may flag the installer or EXE** — Some antivirus software will report the installer or the app as a potential threat (e.g. "Unknown publisher", "Heuristic" or "Generic" detection). **The program is safe.** It is open-source and does not contain malware. Common reasons for false positives: (1) the app is **not code-signed** (no paid certificate from a CA), so Windows and AV vendors treat it as "unknown"; (2) **Electron** apps bundle Node.js and native code, which can trigger heuristic scans; (3) new or rarely-downloaded executables often lack a "reputation" score. You can add an exclusion for the install folder or the downloaded installer, or choose "Run anyway" / "More info → Run anyway" when Windows warns. Builds are produced locally via `npm run dist`; the source is on GitHub for review.
 
@@ -23,16 +25,17 @@ A private, local-only corporation management dashboard for EVE Online. All data 
 | Tab | What it shows |
 |-----|---------------|
 | **Overview** | KPI summary — wallet, fuel status, recent kills, top taxpayers; dashboard load errors show a retry banner |
-| **Structures** | Fuel days remaining, gas stock, alerts for low fuel/gas; fuel overrides and manual gas data (Metenox); manual location names for stock stations |
-| **Metenox** | Moon drill profitability vs live Jita prices, manual material entry |
+| **Structures** | Fuel days remaining, gas stock, alerts for low fuel/gas; fuel overrides and manual gas data (Metenox); manual location names for stock stations. Automatic fuel/mo is from online service modules; if it shows ~2× in-game, set **Display → Fuel “month” hours** to 360 (15-day period). |
+| **Metenox** | Moon drill profitability vs live Jita prices, manual material entry. Materials dropdown is grouped by R tier (R4→R64) and sorted alphabetically within each tier. Gas modal: enter **quantity in Metenox after refilling** (total in structure), not the amount added. |
 | **Wallet & Tax** | Corp wallet journal (search + Enter), taxpayer leaderboard (alt-aggregated), CSV export |
 | **Mining** | Mining ledger by member/main, monthly totals, period presets (This month / Last month), CSV export |
 | **Corp Kills** | Kill rankings (rolling 30-day + monthly), ISK destroyed, period presets |
 | **Member Health** | Kill, Mining, tax, login weights for activity tracking, Fleet Points addable; responsive KPI grid |
-| **Settings** | Sync status, backup & restore, email & Discord notifications, **Display** (color-blind mode), corp rates, fuel hangar selector, alt→main mappings (at bottom) |
+| **Settings** | Sync status, backup & restore, email & Discord notifications, **Display** (color-blind mode, **date format** dd.mm.yyyy / mm.dd.yyyy, **fuel “month” hours** for Structures), corp rates, fuel hangar selector, alt→main mappings (at bottom) |
 
 **UX & accessibility**
 - **Color-blind friendly mode** — Settings → Display. Uses blue/orange/magenta palette for charts and indicators; applies to all built-in charts (kills, Metenox, dashboard).
+- **Date format** — Settings → Display: choose **dd.mm.yyyy (EU)** or **mm.dd.yyyy (US)**; applies to all date displays (wallet, kills, structures, etc.).
 - **Keyboard** — Arrow Left/Right switch tabs (when not in an input); Escape closes modals (gas, Metenox manual materials).
 - **Toasts** — Success/error feedback via non-blocking toasts (bottom-right) instead of `alert()`; destructive actions still use confirm dialogs.
 - **API errors** — Server error messages are shown in the UI (not just "API 403"); dashboard and exports show retry or clear messages.

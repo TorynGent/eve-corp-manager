@@ -51,12 +51,20 @@ function fmtISK(n, decimals = 1) {
 
 function fmtDate(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const loc = (typeof window !== 'undefined' && window.__dateFormat === 'us') ? 'en-US' : 'en-GB';
+  const opts = loc === 'en-US'
+    ? { month: '2-digit', day: '2-digit', year: 'numeric' }
+    : { day: '2-digit', month: 'short', year: 'numeric' };
+  return new Date(iso).toLocaleDateString(loc, opts);
 }
 
 function fmtDateShort(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  const loc = (typeof window !== 'undefined' && window.__dateFormat === 'us') ? 'en-US' : 'en-GB';
+  const opts = loc === 'en-US'
+    ? { month: '2-digit', day: '2-digit' }
+    : { day: '2-digit', month: 'short' };
+  return new Date(iso).toLocaleDateString(loc, opts);
 }
 
 function fuelClass(days) {

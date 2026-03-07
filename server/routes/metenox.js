@@ -52,35 +52,51 @@ function getCostDetails() {
 }
 
 // Refined moon MATERIAL type IDs for the manual-entry dropdown.
-// These are the processed outputs sold on market — NOT the raw moon ores the Metenox mines.
-// Sorted R4 → R64 ascending rarity.
-const MOON_MATERIAL_FALLBACK = [
-  // R4 — Common
-  { type_id: 16634, type_name: 'Atmospheric Gases' },
-  { type_id: 16633, type_name: 'Evaporite Deposits' },
-  { type_id: 16636, type_name: 'Hydrocarbons' },
-  { type_id: 16635, type_name: 'Silicates' },
-  // R8 — Uncommon
-  { type_id: 16643, type_name: 'Cobalt' },
-  { type_id: 16647, type_name: 'Scandium' },
-  { type_id: 16638, type_name: 'Titanium' },
-  { type_id: 16637, type_name: 'Tungsten' },
-  // R16 — Rare
-  { type_id: 16641, type_name: 'Cadmium' },
-  { type_id: 16646, type_name: 'Chromium' },
-  { type_id: 16644, type_name: 'Platinum' },
-  { type_id: 16640, type_name: 'Vanadium' },
-  // R32 — Exceptional
-  { type_id: 16662, type_name: 'Caesium' },
-  { type_id: 16663, type_name: 'Hafnium' },
-  { type_id: 16660, type_name: 'Mercury' },
-  { type_id: 16649, type_name: 'Technetium' },
-  // R64 — Spectacular
-  { type_id: 16650, type_name: 'Dysprosium' },
-  { type_id: 16651, type_name: 'Neodymium' },
-  { type_id: 16652, type_name: 'Promethium' },
-  { type_id: 16653, type_name: 'Thulium' },
+// Sorted by R tier (4,8,16,32,64) then alphabetically by name. Labels include R for display.
+const MOON_MATERIAL_TIERS = [
+  { tier: 4,  label: 'R4 Moon Materials (Ubiquitous)',  materials: [
+    { type_id: 16634, type_name: 'Atmospheric Gases' },
+    { type_id: 16633, type_name: 'Evaporite Deposits' },
+    { type_id: 16636, type_name: 'Hydrocarbons' },
+    { type_id: 16635, type_name: 'Silicates' },
+  ]},
+  { tier: 8,  label: 'R8 Moon Materials (Common)',      materials: [
+    { type_id: 16643, type_name: 'Cobalt' },
+    { type_id: 16647, type_name: 'Scandium' },
+    { type_id: 16638, type_name: 'Titanium' },
+    { type_id: 16637, type_name: 'Tungsten' },
+  ]},
+  { tier: 16, label: 'R16 Moon Materials (Uncommon)',   materials: [
+    { type_id: 16641, type_name: 'Cadmium' },
+    { type_id: 16646, type_name: 'Chromium' },
+    { type_id: 16644, type_name: 'Platinum' },
+    { type_id: 16640, type_name: 'Vanadium' },
+  ]},
+  { tier: 32, label: 'R32 Moon Materials (Rare)',       materials: [
+    { type_id: 16662, type_name: 'Caesium' },
+    { type_id: 16663, type_name: 'Hafnium' },
+    { type_id: 16660, type_name: 'Mercury' },
+    { type_id: 16649, type_name: 'Technetium' },
+  ]},
+  { tier: 64, label: 'R64 Moon Materials (Exceptional)', materials: [
+    { type_id: 16650, type_name: 'Dysprosium' },
+    { type_id: 16651, type_name: 'Neodymium' },
+    { type_id: 16652, type_name: 'Promethium' },
+    { type_id: 16653, type_name: 'Thulium' },
+  ]},
 ];
+
+// Flat list with tier and groupLabel for dropdown (sorted R4→R64, alpha within tier)
+function getMoonMaterialTypes() {
+  const out = [];
+  for (const group of MOON_MATERIAL_TIERS) {
+    const sorted = [...group.materials].sort((a, b) => a.type_name.localeCompare(b.type_name));
+    for (const m of sorted) {
+      out.push({ ...m, tier: group.tier, groupLabel: group.label });
+    }
+  }
+  return out;
+}
 
 // GET /api/metenox — profitability per Metenox structure
 router.get('/', requireAuth, (req, res) => {
@@ -173,11 +189,9 @@ router.post('/manual/:structureId', requireAuth, (req, res) => {
 });
 
 // GET /api/metenox/materials/types — type list for the manual-entry dropdown
-// Always returns only the hardcoded R4–R64 refined moon MATERIALS.
-// Observer data is NOT used here because it contains raw moon ORE type IDs, which are
-// different items from the refined materials players sell on market.
+// Returns flat list sorted by R tier (4→64) then alphabetically; each item has tier and groupLabel for optgroup.
 router.get('/materials/types', requireAuth, (req, res) => {
-  res.json(MOON_MATERIAL_FALLBACK);
+  res.json(getMoonMaterialTypes());
 });
 
 // DELETE /api/metenox/manual/:structureId/:typeId

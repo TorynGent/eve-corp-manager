@@ -265,6 +265,8 @@ router.put('/fuel-hangar', requireAuth, (req, res) => {
 router.get('/display', requireAuth, (req, res) => {
   res.json({
     colorBlindMode: getSetting('color_blind_mode', 'false') === 'true',
+    dateFormat: getSetting('date_format', 'eu') === 'us' ? 'us' : 'eu',
+    structureFuelMonthHours: getSetting('structure_fuel_month_hours', '720'),
   });
 });
 
@@ -272,6 +274,13 @@ router.get('/display', requireAuth, (req, res) => {
 router.put('/display', requireAuth, (req, res) => {
   if (req.body.colorBlindMode !== undefined) {
     setSetting('color_blind_mode', req.body.colorBlindMode ? 'true' : 'false');
+  }
+  if (req.body.dateFormat !== undefined) {
+    setSetting('date_format', req.body.dateFormat === 'us' ? 'us' : 'eu');
+  }
+  if (req.body.structureFuelMonthHours !== undefined) {
+    const n = parseInt(String(req.body.structureFuelMonthHours), 10);
+    setSetting('structure_fuel_month_hours', (n >= 1 && n <= 744) ? String(n) : '720');
   }
   res.json({ ok: true });
 });

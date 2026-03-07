@@ -173,8 +173,18 @@ async function openManualModal(structureId, structureName) {
     }
   }
   const sel = document.getElementById('manual-type-select');
+  const byGroup = {};
+  for (const t of moonOreTypes) {
+    const label = t.groupLabel || ('R' + (t.tier || '') + ' Materials');
+    if (!byGroup[label]) byGroup[label] = [];
+    byGroup[label].push(t);
+  }
   sel.innerHTML = '<option value="">— select material —</option>' +
-    moonOreTypes.map(t => `<option value="${t.type_id}" data-name="${t.type_name}">${t.type_name}</option>`).join('');
+    Object.entries(byGroup).map(([label, items]) =>
+      '<optgroup label="' + String(label).replace(/"/g, '&quot;') + '">' +
+      items.map(t => `<option value="${t.type_id}" data-name="${(t.type_name || '').replace(/"/g, '&quot;')}">R${t.tier || ''} ${t.type_name}</option>`).join('') +
+      '</optgroup>'
+    ).join('');
 
   await refreshManualTable();
 }

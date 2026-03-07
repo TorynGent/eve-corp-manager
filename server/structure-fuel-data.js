@@ -86,7 +86,7 @@ const STRUCTURE_FUEL_MULTIPLIER = {
   81826: 1.00,  // Metenox (refinery; fuel blocks for services if any)
 };
 
-const HOURS_PER_MONTH = 24 * 30; // 720
+const HOURS_PER_MONTH = 24 * 30; // 720 — EVE may show consumption per 15 days in-game; if our calc is 2× in-game, set structure_fuel_month_hours to 360 in Settings.
 
 /** Metenox (81826) has one moon drill = 5 blocks/hr = 3600/month. If ESI returns an unknown service name we default to 10 → 7200; use 5 for Metenox so auto shows 3600. */
 const METENOX_TYPE_ID = 81826;

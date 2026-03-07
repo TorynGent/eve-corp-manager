@@ -17,6 +17,7 @@ const METENOX_TYPE_ID  = 81826;
 router.get('/', requireAuth, (req, res) => {
   const structures = db.prepare('SELECT * FROM structures ORDER BY name').all();
   const gasConsumptionPerMonth = parseInt(getSetting('gas_consumption_per_month', '144000'), 10) || 144000;
+  const fuelMonthHours = Math.max(1, parseInt(getSetting('structure_fuel_month_hours', '720'), 10) || 720);
 
   const result = structures.map(s => {
     // Fuel block days remaining
@@ -58,7 +59,8 @@ router.get('/', requireAuth, (req, res) => {
     const overrideKey = `structure_fuel_override_${s.structure_id}`;
     const overrideRaw = getSetting(overrideKey);
     const hasOverride = overrideRaw != null && String(overrideRaw).trim() !== '';
-    const fuelPerMonth = hasOverride ? Math.max(0, parseInt(overrideRaw, 10) || 0) : computedFuelPerMonth;
+    // If automatic: use fuelMonthHours (default 720). Set to 360 in Settings if in-game shows half our value (EVE may use 15-day period).
+    const fuelPerMonth = hasOverride ? Math.max(0, parseInt(overrideRaw, 10) || 0) : Math.round(computedFuelPerHour * fuelMonthHours);
     const fuelPerHour = hasOverride ? Math.round(fuelPerMonth / 720) : computedFuelPerHour;
 
     return {

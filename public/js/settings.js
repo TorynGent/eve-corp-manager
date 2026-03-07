@@ -419,24 +419,47 @@ function loadSettings() {
   loadCorpRates();
 }
 
-// ── Display (color blind mode) ───────────────────────────────────────────────
+// ── Display (color blind, date format, fuel month hours) ───────────────────────
 async function loadDisplaySettings() {
   try {
     const data = await api.get('/api/settings/display');
     const cb = document.getElementById('color-blind-mode');
     if (cb) cb.checked = !!data.colorBlindMode;
     document.getElementById('app')?.classList.toggle('color-blind-mode', !!data.colorBlindMode);
+    if (typeof window !== 'undefined') window.__dateFormat = data.dateFormat || 'eu';
+    const dateSel = document.getElementById('date-format-select');
+    if (dateSel) dateSel.value = data.dateFormat === 'us' ? 'us' : 'eu';
+    const fuelHours = document.getElementById('structure-fuel-month-hours');
+    if (fuelHours) fuelHours.value = data.structureFuelMonthHours || '720';
   } catch (err) { console.error('Display settings load error:', err); }
+}
+
+function saveDisplaySettings(extra = {}) {
+  const fb = document.getElementById('display-feedback');
+  const cb = document.getElementById('color-blind-mode');
+  const dateSel = document.getElementById('date-format-select');
+  const fuelHours = document.getElementById('structure-fuel-month-hours');
+  const body = {
+    colorBlindMode: !!cb?.checked,
+    dateFormat: dateSel?.value === 'us' ? 'us' : 'eu',
+    structureFuelMonthHours: fuelHours ? String(Math.max(1, Math.min(744, parseInt(fuelHours.value, 10) || 720))) : '720',
+    ...extra,
+  };
+  return api.put('/api/settings/display', body).then(() => {
+    if (typeof window !== 'undefined') window.__dateFormat = body.dateFormat;
+    if (fb) { fb.textContent = 'Saved.'; fb.style.color = 'var(--green)'; setTimeout(() => { fb.textContent = ''; }, 2000); }
+  }).catch(err => {
+    if (fb) { fb.textContent = 'Error: ' + err.message; fb.style.color = 'var(--red)'; throw err; }
+  });
 }
 
 document.getElementById('color-blind-mode')?.addEventListener('change', async function () {
   const enabled = this.checked;
-  const fb = document.getElementById('display-feedback');
   try {
-    await api.put('/api/settings/display', { colorBlindMode: enabled });
+    await saveDisplaySettings({ colorBlindMode: enabled });
     document.getElementById('app')?.classList.toggle('color-blind-mode', enabled);
-    if (fb) { fb.textContent = 'Saved.'; fb.style.color = 'var(--green)'; setTimeout(() => { fb.textContent = ''; }, 2000); }
-  } catch (err) {
-    if (fb) { fb.textContent = 'Error: ' + err.message; fb.style.color = 'var(--red)'; }
-  }
+  } catch (_) {}
 });
+
+document.getElementById('date-format-select')?.addEventListener('change', () => saveDisplaySettings());
+document.getElementById('structure-fuel-month-hours')?.addEventListener('blur', () => saveDisplaySettings());
