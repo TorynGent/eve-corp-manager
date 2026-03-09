@@ -77,26 +77,59 @@ async function exchangeCode(code, codeVerifier) {
 
 // ─── Token refresh ────────────────────────────────────────────────────────────
 
+/** In-flight refresh promise per character (avoid concurrent refresh for same character) */
+const refreshLocks = new Map();
+
 /**
  * Refresh an expired access token.
  * PKCE refresh tokens only need client_id — no client_secret.
+ * EVE may return a new refresh_token (rotating); we persist it when present.
  */
 async function refreshToken(characterId) {
-  const row = getToken(characterId);
-  if (!row) throw new Error(`No token found for character ${characterId}`);
+  let lock = refreshLocks.get(characterId);
+  if (lock) {
+    await lock;
+    const row = getToken(characterId);
+    return row ? row.access_token : refreshToken(characterId);
+  }
 
-  const res = await axios.post(TOKEN_URL,
-    new URLSearchParams({
-      grant_type:    'refresh_token',
-      refresh_token: row.refresh_token,
-      client_id:     process.env.EVE_CLIENT_ID,
-    }),
-    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-  );
+  const promise = (async () => {
+    const row = getToken(characterId);
+    if (!row) throw new Error(`No token found for character ${characterId}`);
 
-  const expiresAt = Math.floor(Date.now() / 1000) + res.data.expires_in - 60;
-  updateAccessToken(characterId, res.data.access_token, expiresAt);
-  return res.data.access_token;
+    try {
+      const res = await axios.post(TOKEN_URL,
+        new URLSearchParams({
+          grant_type:    'refresh_token',
+          refresh_token: row.refresh_token,
+          client_id:     process.env.EVE_CLIENT_ID,
+        }),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+      );
+
+      const data = res.data;
+      const expiresAt = Math.floor(Date.now() / 1000) + data.expires_in - 60;
+      const newRefresh = data.refresh_token || row.refresh_token;
+      updateAccessToken(characterId, data.access_token, expiresAt, newRefresh);
+      console.log(`[Auth] Token refreshed for character ${characterId}`);
+      return data.access_token;
+    } catch (err) {
+      const msg = err.response?.data?.error_description || err.message;
+      console.error(`[Auth] Token refresh failed for character ${characterId}:`, msg);
+      throw err;
+    } finally {
+      refreshLocks.delete(characterId);
+    }
+  })();
+
+  refreshLocks.set(characterId, promise);
+  return promise;
+}
+
+/** Force a token refresh regardless of expires_at (e.g. after ESI 401). */
+async function forceRefreshToken(characterId) {
+  refreshLocks.delete(characterId);
+  return refreshToken(characterId);
 }
 
 // ─── Token helpers ────────────────────────────────────────────────────────────
@@ -164,4 +197,4 @@ function requireAuth(req, res, next) {
   res.status(401).json({ error: 'Not authenticated' });
 }
 
-module.exports = { buildAuthUrl, exchangeCode, verifyAndSave, getValidToken, requireAuth, REQUIRED_SCOPES };
+module.exports = { buildAuthUrl, exchangeCode, verifyAndSave, getValidToken, forceRefreshToken, requireAuth, REQUIRED_SCOPES };

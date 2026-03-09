@@ -237,7 +237,7 @@ document.getElementById('csv-file-input')?.addEventListener('change', async (e) 
 
 // ── Member Health Weights ─────────────────────────────────────────────────────
 function updateHealthWeightSum() {
-  const sum = ['hw-tax','hw-mining','hw-kills','hw-activity','hw-fatpap'].reduce((s, id) => {
+  const sum = ['hw-tax','hw-kills','hw-activity','hw-fatpap'].reduce((s, id) => {
     const el = document.getElementById(id);
     return s + (el ? parseInt(el.value, 10) || 0 : 0);
   }, 0);
@@ -247,7 +247,7 @@ function updateHealthWeightSum() {
   lbl.style.color = sum === 100 ? 'var(--green)' : 'var(--orange)';
 }
 
-['hw-tax','hw-mining','hw-kills','hw-activity','hw-fatpap'].forEach(id => {
+['hw-tax','hw-kills','hw-activity','hw-fatpap'].forEach(id => {
   document.getElementById(id)?.addEventListener('input', e => {
     document.getElementById(id + '-val').textContent = e.target.value + '%';
     updateHealthWeightSum();
@@ -261,7 +261,6 @@ async function loadHealthWeights() {
   try {
     const cfg = await api.get('/api/health/weights');
     document.getElementById('hw-tax').value               = cfg.weightTax;
-    document.getElementById('hw-mining').value            = cfg.weightMining;
     document.getElementById('hw-kills').value             = cfg.weightKills;
     document.getElementById('hw-activity').value          = cfg.weightActivity;
     document.getElementById('hw-fatpap').value            = cfg.weightFatPap;
@@ -270,7 +269,6 @@ async function loadHealthWeights() {
     document.getElementById('hw-threshold-active').value   = cfg.thresholdActive;
     document.getElementById('hw-threshold-atrisk').value   = cfg.thresholdAtRisk;
     document.getElementById('hw-tax-val').textContent      = cfg.weightTax      + '%';
-    document.getElementById('hw-mining-val').textContent   = cfg.weightMining   + '%';
     document.getElementById('hw-kills-val').textContent    = cfg.weightKills    + '%';
     document.getElementById('hw-activity-val').textContent = cfg.weightActivity + '%';
     document.getElementById('hw-fatpap-val').textContent   = cfg.weightFatPap  + '%';
@@ -281,7 +279,7 @@ async function loadHealthWeights() {
 
 document.getElementById('btn-save-health-weights')?.addEventListener('click', async () => {
   const fb  = document.getElementById('health-weights-feedback');
-  const sum = ['hw-tax','hw-mining','hw-kills','hw-activity','hw-fatpap'].reduce((s, id) => {
+  const sum = ['hw-tax','hw-kills','hw-activity','hw-fatpap'].reduce((s, id) => {
     return s + parseInt(document.getElementById(id).value, 10) || 0;
   }, 0);
   if (sum !== 100) {
@@ -292,7 +290,6 @@ document.getElementById('btn-save-health-weights')?.addEventListener('click', as
   try {
     await api.put('/api/health/weights', {
       weightTax:         document.getElementById('hw-tax').value,
-      weightMining:      document.getElementById('hw-mining').value,
       weightKills:       document.getElementById('hw-kills').value,
       weightActivity:    document.getElementById('hw-activity').value,
       weightFatPap:      document.getElementById('hw-fatpap').value,
@@ -339,9 +336,7 @@ async function loadCorpRates() {
   try {
     const r = await api.get('/api/settings/corp-rates');
     const taxEl = document.getElementById('corp-tax-rate');
-    const miningEl = document.getElementById('corp-mining-tax-rate');
     if (taxEl) taxEl.value = r.taxRatePercent != null ? r.taxRatePercent : '';
-    if (miningEl) miningEl.value = r.miningTaxRatePercent != null ? r.miningTaxRatePercent : '';
   } catch (err) { console.error('Corp rates load error:', err); }
 }
 
@@ -349,10 +344,8 @@ document.getElementById('btn-save-corp-rates')?.addEventListener('click', async 
   const fb = document.getElementById('corp-rates-feedback');
   try {
     const taxVal = document.getElementById('corp-tax-rate')?.value?.trim() ?? '';
-    const miningVal = document.getElementById('corp-mining-tax-rate')?.value?.trim() ?? '';
     await api.put('/api/settings/corp-rates', {
       taxRatePercent: taxVal === '' ? null : parseFloat(taxVal),
-      miningTaxRatePercent: miningVal === '' ? null : parseFloat(miningVal),
     });
     fb.innerHTML = '<span class="alert alert-ok" style="padding:2px 8px">Saved</span>';
     setTimeout(() => { fb.innerHTML = ''; }, 2500);

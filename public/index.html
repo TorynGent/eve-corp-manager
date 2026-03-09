@@ -68,7 +68,6 @@
     <div class="nav-tab" data-tab="structures">Structures</div>
     <div class="nav-tab" data-tab="metenox">Metenox</div>
     <div class="nav-tab" data-tab="wallet">Wallet &amp; Tax</div>
-    <div class="nav-tab" data-tab="mining">Mining</div>
     <div class="nav-tab" data-tab="kills">Corp Kills</div>
     <div class="nav-tab" data-tab="health">Member Health</div>
     <div class="nav-tab" data-tab="settings">Settings</div>
@@ -84,7 +83,6 @@
         <div class="card kpi"><div class="label">Active Members</div><div class="value" id="kpi-members">—</div><div class="sub" id="kpi-members-sub">of total</div><div class="sub" id="kpi-members-breakdown" style="font-size:0.7rem;margin-top:6px;color:var(--text-dim)"></div></div>
         <div class="card kpi" id="kpi-metenox-card"><div class="label">Metenox Count</div><div class="value" id="kpi-metenox">—</div><div class="sub" id="kpi-metenox-sub">structures online</div></div>
       </div>
-      <div id="overview-mining-line" style="font-size:0.8rem;color:var(--text-dim);margin-top:-8px;margin-bottom:16px"></div>
 
       <div class="overview-glance mb-20" id="overview-glance" style="display:none">
         <div class="card card-slim" id="overview-metenox-card">
@@ -242,6 +240,13 @@
         </div>
       </div>
 
+      <div class="card mb-20">
+        <div class="card-title">Monthly Corp Flow — Last 12 Months
+          <button type="button" class="btn btn-ghost btn-small" id="btn-export-flow-csv" title="Export as CSV">Export CSV</button>
+        </div>
+        <canvas id="chart-corp-flow"></canvas>
+      </div>
+
       <div class="grid-2 mb-20">
         <div class="card">
         <div class="card-title">Tax Contributions by Group
@@ -291,58 +296,6 @@
           <span id="journal-page-info" style="font-size:0.75rem;color:var(--text-dim)"></span>
           <button class="btn btn-ghost btn-small" id="journal-next">Next →</button>
         </div>
-      </div>
-    </div>
-
-    <!-- ─── MINING ──────────────────────────────── -->
-    <div class="tab-panel" id="tab-mining">
-      <div class="card mb-20">
-        <div class="card-title">Corp Mining Ledger
-          <span class="period-presets" style="margin-left:8px">
-            <button type="button" class="btn btn-ghost btn-small mining-period-preset" data-period="rolling30">Last 30 days</button>
-            <button type="button" class="btn btn-ghost btn-small mining-period-preset" data-period="this">This month</button>
-            <button type="button" class="btn btn-ghost btn-small mining-period-preset" data-period="last">Last month</button>
-            <button type="button" class="btn btn-ghost btn-small mining-period-preset" data-period="last3">Last 3 months</button>
-          </span>
-          <select id="mining-period" style="margin-left:10px;width:auto;padding:3px 6px;font-size:0.72rem;display:inline-block"></select>
-          <span id="mining-period-label" style="margin-left:10px;font-size:0.72rem;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400"></span>
-          <span id="mining-miner-count" style="margin-left:auto;font-size:0.72rem;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400"></span>
-          <button type="button" class="btn btn-ghost btn-small" id="mining-export-csv" title="Export mining ledger as CSV">Export CSV</button>
-        </div>
-        <p style="font-size:0.7rem;color:var(--text-dim);margin-top:4px">Period dropdown includes <strong>Last 30 days</strong> and <strong>Last 3 months</strong> (latter aggregates three calendar months; with only one month of ESI data it may match this month).</p>
-        <input type="text" id="mining-search" placeholder="Search miner name…" style="margin-bottom:10px;width:200px;padding:4px 8px;font-size:0.72rem;display:block" title="Filter table by main name">
-        <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">
-          <div class="table-wrap" style="flex:1;min-width:280px">
-            <table>
-              <thead><tr>
-                <th>Main (click to expand)</th>
-                <th class="text-right">Total Ore</th>
-                <th class="text-right">Est. Value (Jita Buy)</th>
-                <th style="min-width:120px">Share</th>
-                <th class="text-right">%</th>
-              </tr></thead>
-              <tbody id="mining-tbody"><tr><td colspan="5" class="loading"><span class="spinner"></span> Loading mining data…</td></tr></tbody>
-            </table>
-          </div>
-          <div style="flex:0 0 280px;max-width:320px">
-            <div class="card-title" style="font-size:0.85rem;margin-bottom:8px">Share by main</div>
-            <canvas id="chart-mining-pie" style="max-height:260px"></canvas>
-          </div>
-        </div>
-      </div>
-      <div class="card mb-20">
-        <div class="card-title">Top 10 Miners by Value</div>
-        <canvas id="chart-mining"></canvas>
-      </div>
-      <div class="card mb-20">
-        <div class="card-title">Mining by Ore Type</div>
-        <div id="mining-by-type-wrap"><p class="empty">Load mining data to see breakdown by type.</p></div>
-        <canvas id="chart-mining-by-type" style="max-height:280px"></canvas>
-      </div>
-      <div class="card mb-20" id="mining-expected-tax-card">
-        <div class="card-title">Expected Tax from Mining (sanity check)</div>
-        <p style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px">Moon/mining tax is a percentage of mined <strong>volume</strong>. Expected tax = X% of total volume (ISK below is that volume valued at Jita, for comparison with wallet).</p>
-        <div id="mining-expected-tax-content"><p class="dim">Set mining tax rate in Settings. Load mining data first.</p></div>
       </div>
     </div>
 
@@ -408,9 +361,8 @@
               <tr>
                 <th class="sortable" data-sort="rank" title="Rank by health score">#</th>
                 <th class="sortable" data-sort="mainName" title="Main character (alts grouped)">Member</th>
-                <th class="sortable" data-sort="healthScore" title="Weighted composite: Tax + Mining + Kills + Activity + FAT/PAP (log-normalized per metric, then weighted).">Health</th>
+                <th class="sortable" data-sort="healthScore" title="Weighted composite: Tax + Kills + Activity + FAT/PAP (log-normalized per metric, then weighted).">Health</th>
                 <th class="sortable" data-sort="taxScore" title="Log-normalized score from ISK contributed via bounties, missions, industry tax, etc. (rolling 30d).">Tax</th>
-                <th class="sortable" data-sort="miningScore" title="Log-normalized score from mining value (quantity × Jita buy price) in last 30 days.">Mining</th>
                 <th class="sortable" data-sort="killScore" title="Log-normalized score from corp kill participation count (rolling 30d).">Kills</th>
                 <th class="sortable" data-sort="activityScore" title="Based on last login: 100 − (days since login × 100 / inactive threshold).">Activity</th>
                 <th class="sortable" data-sort="fatPapScore" id="health-fatpap-header" title="FAT/PAP points from FAT PAP Manager DB or manual override; log-normalized.">FAT/PAP</th>
@@ -418,7 +370,7 @@
                 <th title="Status from score vs thresholds (Hardcore / Active / At Risk / Inactive).">Status</th>
               </tr>
             </thead>
-            <tbody id="health-tbody"><tr><td colspan="10" class="loading"><span class="spinner"></span> Loading…</td></tr></tbody>
+            <tbody id="health-tbody"><tr><td colspan="9" class="loading"><span class="spinner"></span> Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -489,17 +441,12 @@
       <div class="card mb-20">
         <div class="card-title">Corporation Tax Rates (optional)</div>
         <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:14px;line-height:1.5">
-          If set, these are shown on the Wallet &amp; Tax tab. <strong>ISK tax</strong> = general corp tax on bounties, missions, etc. <strong>Mining tax</strong> = % of mined volume (used for &quot;Expected tax from mining&quot; on the Mining tab). ESI does not expose corp tax; enter values from in-game Corp Management → Settings.
+          If set, this is shown on the Wallet &amp; Tax tab. ESI does not expose corp tax; enter the value from in-game Corp Management → Settings.
         </p>
         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
           <div>
             <label style="font-size:0.75rem">ISK tax rate %</label>
             <input type="number" id="corp-tax-rate" min="0" max="100" step="0.1" placeholder="e.g. 10"
-                   style="width:80px;margin-left:8px;padding:4px 8px;font-size:0.85rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px">
-          </div>
-          <div>
-            <label style="font-size:0.75rem">Mining tax rate %</label>
-            <input type="number" id="corp-mining-tax-rate" min="0" max="100" step="0.1" placeholder="e.g. 10"
                    style="width:80px;margin-left:8px;padding:4px 8px;font-size:0.85rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px">
           </div>
           <button class="btn btn-primary btn-small" id="btn-save-corp-rates">Save</button>
@@ -550,11 +497,6 @@
             <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
               <input type="range" id="hw-tax" min="0" max="100" step="5" value="30" style="flex:1">
               <span class="range-val" id="hw-tax-val">30%</span>
-            </div>
-            <label style="margin-top:14px;display:block">Mining Contribution Weight</label>
-            <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-              <input type="range" id="hw-mining" min="0" max="100" step="5" value="30" style="flex:1">
-              <span class="range-val" id="hw-mining-val">30%</span>
             </div>
           </div>
           <div>
@@ -816,7 +758,6 @@
 <script src="/js/metenox.js"></script>
 <script src="/js/wallet.js"></script>
 <script src="/js/inventory.js"></script>
-<script src="/js/mining.js"></script>
 <script src="/js/kills.js"></script>
 <script src="/js/health.js"></script>
 <script src="/js/settings.js"></script>

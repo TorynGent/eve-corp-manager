@@ -27,10 +27,9 @@ A private, local-only corporation management dashboard for EVE Online. All data 
 | **Overview** | KPI summary — wallet, fuel status, recent kills, top taxpayers; dashboard load errors show a retry banner |
 | **Structures** | Fuel days remaining, gas stock, alerts for low fuel/gas; fuel overrides and manual gas data (Metenox); manual location names for stock stations. Automatic fuel/mo is from online service modules; if it shows ~2× in-game, set **Display → Fuel “month” hours** to 360 (15-day period). |
 | **Metenox** | Moon drill profitability vs live Jita prices, manual material entry. Materials dropdown is grouped by R tier (R4→R64) and sorted alphabetically within each tier. Gas modal: enter **quantity in Metenox after refilling** (total in structure), not the amount added. |
-| **Wallet & Tax** | Corp wallet journal (search + Enter), taxpayer leaderboard (alt-aggregated), CSV export |
-| **Mining** | Mining ledger by member/main, monthly totals, period presets (This month / Last month), CSV export |
+| **Wallet & Tax** | Monthly corp flow chart (income / expenses / net per month, last 12 months, CSV export of all history); corp wallet journal (search + Enter), taxpayer leaderboard (alt-aggregated), CSV export |
 | **Corp Kills** | Kill rankings (rolling 30-day + monthly), ISK destroyed, period presets |
-| **Member Health** | Kill, Mining, tax, login weights for activity tracking, Fleet Points addable; responsive KPI grid |
+| **Member Health** | Tax, kills, activity, login weights for activity tracking; Fleet Points addable; responsive KPI grid |
 | **Settings** | Sync status, backup & restore, email & Discord notifications, **Display** (color-blind mode, **date format** dd.mm.yyyy / mm.dd.yyyy, **fuel “month” hours** for Structures), corp rates, fuel hangar selector, alt→main mappings (at bottom) |
 
 **UX & accessibility**
@@ -56,7 +55,6 @@ A private, local-only corporation management dashboard for EVE Online. All data 
 | Corp wallet | Every hour |
 | Corp assets (gas/fuel stock) | Every hour |
 | Member tracking | Every hour |
-| Mining ledger | Every hour |
 | Corp kills | Every hour |
 | Jita market prices | Every 5 minutes |
 | Email alert check | Daily 08:00 UTC |
@@ -94,10 +92,9 @@ Callback URL: `http://localhost:3000/auth/callback`
 
 You can export data as CSV for use in spreadsheets or external reporting:
 
-- **Wallet & Tax tab** — **Export tax CSV**: tax summary by period (uses the same period as the “Tax Contributions by Group” selector). **Export CSV** next to Wallet Journal: journal entries (division 1) for the selected period and optional ref-type filter, up to 10,000 rows.
-- **Mining tab** — **Export CSV**: mining ledger for the selected period (main name, character name, type, quantity).
+- **Wallet & Tax tab** — **Export tax CSV**: tax summary by period (uses the same period as the “Tax Contributions by Group” selector). **Export CSV** next to Wallet Journal: journal entries (division 1) for the selected period and optional ref-type filter, up to 10,000 rows. **Export CSV** next to the Monthly Corp Flow chart: all available monthly income/expenses/net history (not just the 12 months shown in the chart).
 
-Files download with sensible names (e.g. `wallet-journal-2026-03.csv`, `tax-summary-2026-03.csv`, `mining-ledger-2026-03.csv`).
+Files download with sensible names (e.g. `wallet-journal-2026-03.csv`, `tax-summary-2026-03.csv`, `corp-monthly-flow.csv`).
 
 ---
 
@@ -134,7 +131,7 @@ Structure alerts (low fuel blocks or low magmatic gas) can be sent by **email** 
 
 ## Alt → Main Mapping
 
-Aggregate kills, mining, and tax by main character:
+Aggregate kills and tax by main character:
 - **Settings tab → Import CSV** — one `AltName,MainName` pair per line
 - Or run `python scripts\import_alts.py` to import from Corp Management.xlsx
 

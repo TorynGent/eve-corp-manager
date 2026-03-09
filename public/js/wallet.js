@@ -4,6 +4,7 @@ let journalPages = 1;
 async function loadWallet() {
   await Promise.all([
     loadPnl(),
+    loadCorpFlowChart(),
     loadTaxCharts(),
     loadJournal(),
     loadWalletHistory(),
@@ -23,8 +24,7 @@ async function loadTaxCharts() {
     const ratesEl = document.getElementById('tax-rates-info');
     if (ratesEl) {
       const iskStr = rates.taxRatePercent != null ? `${rates.taxRatePercent}%` : '—';
-      const miningStr = rates.miningTaxRatePercent != null ? `${rates.miningTaxRatePercent}%` : '—';
-      ratesEl.textContent = `ISK tax: ${iskStr} · Mining tax: ${miningStr}${!rates.taxRatePercent && !rates.miningTaxRatePercent ? ' (set in Settings)' : ''}`;
+      ratesEl.textContent = `ISK tax: ${iskStr}${!rates.taxRatePercent ? ' (set in Settings)' : ''}`;
     }
 
     // Donut chart — by main group
@@ -77,6 +77,43 @@ async function loadWalletHistory() {
     console.error('Wallet history error:', err);
   }
 }
+
+let _corpFlowData = [];
+
+async function loadCorpFlowChart() {
+  try {
+    const rows = await api.get('/api/wallet/monthly-flow', { months: 12 });
+    _corpFlowData = rows;
+    if (!rows.length) return;
+    makeFlowChart(
+      'chart-corp-flow',
+      rows.map(r => r.month),
+      rows.map(r => r.income),
+      rows.map(r => r.expenses),
+      rows.map(r => r.net),
+    );
+  } catch (err) {
+    console.error('Corp flow chart error:', err);
+  }
+}
+
+document.getElementById('btn-export-flow-csv')?.addEventListener('click', async () => {
+  try {
+    // Fetch all available months (months=0) for the export — not just the 12 shown in the chart
+    const rows = await api.get('/api/wallet/monthly-flow', { months: 0 });
+    if (!rows.length) { toast('No data to export.', 'error'); return; }
+    const lines = ['Month,Income (ISK),Expenses (ISK),Net (ISK)'];
+    for (const r of rows) lines.push([r.month, r.income, r.expenses, r.net].join(','));
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'corp-monthly-flow.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (err) {
+    toast('Export failed: ' + err.message, 'error');
+  }
+});
 
 async function loadJournal() {
   const filter = document.getElementById('journal-filter').value.trim();

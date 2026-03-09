@@ -93,14 +93,57 @@ router.get('/taxpayers', requireAuth, (req, res) => {
   res.json({ period: 'rolling', data });
 });
 
-/** GET /api/wallet/rates — corp ISK tax % and mining tax % (from settings, for display) */
+/** GET /api/wallet/rates — corp ISK tax % (from settings, for display) */
 router.get('/rates', requireAuth, (req, res) => {
   const taxRate = getSetting('corp_tax_rate');
-  const miningTaxRate = getSetting('corp_mining_tax_rate');
   res.json({
     taxRatePercent: taxRate != null && taxRate !== '' ? parseFloat(taxRate) : null,
-    miningTaxRatePercent: miningTaxRate != null && miningTaxRate !== '' ? parseFloat(miningTaxRate) : null,
   });
+});
+
+/**
+ * GET /api/wallet/monthly-flow?months=12
+ * Income vs expenses vs net per calendar month for the last N months.
+ * Excludes same-corp corporation_account_withdrawal (inter-division transfers).
+ */
+router.get('/monthly-flow', requireAuth, (req, res) => {
+  const rawMonths = parseInt(req.query.months || '12', 10);
+  const token  = getToken(req.session.characterId);
+  const corpId = token?.corporation_id ?? null;
+
+  // months=0 means "all available data"
+  let cutoff;
+  if (rawMonths === 0) {
+    cutoff = '2000-01';
+  } else {
+    const months = Math.min(60, Math.max(1, rawMonths));
+    const d = new Date();
+    d.setMonth(d.getMonth() - months + 1);
+    cutoff = d.toISOString().slice(0, 7);
+  }
+
+  const rows = db.prepare(`
+    SELECT
+      substr(date, 1, 7) AS month,
+      SUM(CASE WHEN amount > 0 THEN amount      ELSE 0 END) AS income,
+      SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) AS expenses
+    FROM wallet_journal
+    WHERE division = 1
+      AND substr(date, 1, 7) >= ?
+      AND NOT (
+        ref_type = 'corporation_account_withdrawal'
+        AND (second_party_id = ? OR second_party_id IS NULL)
+      )
+    GROUP BY month
+    ORDER BY month ASC
+  `).all(cutoff, corpId);
+
+  res.json(rows.map(r => ({
+    month:    r.month,
+    income:   Math.round(r.income   || 0),
+    expenses: Math.round(r.expenses || 0),
+    net:      Math.round((r.income  || 0) - (r.expenses || 0)),
+  })));
 });
 
 /**

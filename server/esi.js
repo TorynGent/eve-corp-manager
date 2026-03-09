@@ -1,6 +1,6 @@
 'use strict';
 const axios          = require('axios');
-const { getValidToken, } = require('./auth');
+const { getValidToken, forceRefreshToken } = require('./auth');
 const { cacheName, getCachedName } = require('./db');
 
 const ESI_BASE = 'https://esi.evetech.net/latest';
@@ -57,6 +57,33 @@ async function esiGet(path, { characterId = null, params = {}, retries = 3 } = {
         return res.data;
       }
 
+      // 401 with auth: token may be invalidated (e.g. after re-auth). Force refresh and retry once.
+      if (res.status === 401 && characterId) {
+        try {
+          await forceRefreshToken(characterId);
+          const token = await getValidToken(characterId);
+          headers['Authorization'] = `Bearer ${token}`;
+          const retry = await axios.get(url, { params, headers, validateStatus: s => s < 600 });
+          if (retry.status === 304 && cached) return cached.data;
+          if (retry.status === 200) {
+            if (retry.headers.etag) {
+              etagCache.set(url + JSON.stringify(params), { etag: retry.headers.etag, data: retry.data });
+            }
+            return retry.data;
+          }
+          if (retry.status >= 400 && retry.status < 500) {
+            console.warn(`[ESI] ${retry.status} on ${path} after refresh (error budget: ${parseInt(retry.headers['x-esi-error-limit-remain'] || '100', 10)})`);
+          }
+          const retryErr = Object.assign(new Error(`ESI ${retry.status} on ${path}`), { status: retry.status, body: retry.data });
+          if (retry.status === 401 || retry.status === 403) throw retryErr;
+          throw retryErr;
+        } catch (refreshErr) {
+          if (refreshErr.status === 401 || refreshErr.status === 403) throw refreshErr;
+          console.warn(`[ESI] Refresh then retry failed for ${path}:`, refreshErr.message);
+          throw Object.assign(new Error(`ESI ${res.status} on ${path}`), { status: res.status, body: res.data });
+        }
+      }
+
       // Log 4xx errors so we can see exactly what's failing
       if (res.status >= 400 && res.status < 500) {
         console.warn(`[ESI] ${res.status} on ${path} (error budget: ${errRemain})`);
@@ -105,6 +132,30 @@ async function esiGetAll(path, options = {}) {
       // ESI returns 404 for endpoints with no data (e.g. corp mining ledger with no recent
       // activity). Treat as empty result rather than an error.
       break;
+    } else if (res.status === 401 && options.characterId) {
+      // Token may be invalidated; force refresh and retry this page once.
+      try {
+        await forceRefreshToken(options.characterId);
+        const token = await getValidToken(options.characterId);
+        headers['Authorization'] = `Bearer ${token}`;
+        const retry = await axios.get(url, { params, headers, validateStatus: s => s < 600 });
+        if (retry.status === 200) {
+          results = results.concat(retry.data);
+          const totalPages = parseInt(retry.headers['x-pages'] || '1', 10);
+          if (page >= totalPages) break;
+          page++;
+        } else if (retry.status === 404) {
+          // Same as normal path: 404 = no data (e.g. mining ledger/observers with nothing in period)
+          break;
+        } else {
+          console.warn(`[ESI] esiGetAll got ${retry.status} on ${path} page ${page} after refresh — aborting pagination`);
+          throw new Error(`ESI ${retry.status} on ${path}`);
+        }
+      } catch (refreshErr) {
+        if (refreshErr.message && refreshErr.message.startsWith('ESI ')) throw refreshErr;
+        console.warn(`[ESI] esiGetAll got 401 on ${path} page ${page} — refresh failed:`, refreshErr.message);
+        throw new Error(`ESI 401 on ${path}`);
+      }
     } else {
       // Other 4xx/5xx — log clearly so we can diagnose failures (e.g. scope issues = 403)
       console.warn(`[ESI] esiGetAll got ${res.status} on ${path} page ${page} — aborting pagination`);

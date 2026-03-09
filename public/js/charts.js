@@ -81,6 +81,94 @@ function makeBarChart(id, labels, datasets, opts = {}) {
   });
 }
 
+/**
+ * makeFlowChart — grouped bar (income/expenses, left axis) + line overlay (net, right axis).
+ * Used for the Monthly Corp Flow chart on the Wallet tab.
+ */
+function makeFlowChart(id, labels, income, expenses, net) {
+  destroyChart(id);
+  const c = getThemeColors();
+  // Compact billion/million formatter for axis ticks
+  const fmtB = v => {
+    const abs = Math.abs(v);
+    if (abs >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+    if (abs >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+    return (v / 1e3).toFixed(0) + 'K';
+  };
+  charts[id] = new Chart(document.getElementById(id), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Income',
+          data: income,
+          backgroundColor: themeColorWithAlpha(c.green, 0.55),
+          borderColor: c.green,
+          borderWidth: 1,
+          maxBarThickness: 60,
+          barPercentage: 1.0,
+          categoryPercentage: 0.8,
+          yAxisID: 'y',
+          order: 2,
+        },
+        {
+          label: 'Expenses',
+          data: expenses,
+          backgroundColor: themeColorWithAlpha(c.red, 0.55),
+          borderColor: c.red,
+          borderWidth: 1,
+          maxBarThickness: 60,
+          barPercentage: 1.0,
+          categoryPercentage: 0.8,
+          yAxisID: 'y',
+          order: 2,
+        },
+        {
+          type: 'line',
+          label: 'Net',
+          data: net,
+          borderColor: c.blue,
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          tension: 0.25,
+          yAxisID: 'y1',
+          order: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, padding: 16 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtISK(ctx.raw)} ISK` } },
+      },
+      scales: {
+        x: { grid: { color: 'rgba(30,48,79,.5)' }, ticks: { color: '#7a95b5' } },
+        // Left axis — income & expenses bars
+        y: {
+          position: 'left',
+          grid: { color: 'rgba(30,48,79,.5)' },
+          ticks: { color: '#7a95b5', callback: v => fmtB(v) },
+        },
+        // Right axis — net line; only the zero baseline drawn on chart area
+        y1: {
+          position: 'right',
+          grid: {
+            drawOnChartArea: true,
+            color: ctx => ctx.tick.value === 0 ? 'rgba(190,210,240,0.45)' : 'transparent',
+            lineWidth: ctx => ctx.tick.value === 0 ? 2 : 0,
+          },
+          ticks: { color: c.blue, callback: v => fmtB(v) },
+        },
+      },
+    },
+  });
+}
+
 function makeDoughnutChart(id, labels, data, title = '') {
   destroyChart(id);
   const total = data.reduce((a, b) => a + b, 0);

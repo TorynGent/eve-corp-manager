@@ -22,7 +22,6 @@ async function runFullSync(characterId) {
     syncAssets(characterId, corpId),
     syncMarketPrices(),
     syncMemberTracking(characterId, corpId),
-    syncMiningLedger(characterId, corpId),
     syncMiningObservers(characterId, corpId),
     // Always sync Jita buy prices: fuel blocks + magmatic gas + all R4–R64 moon MATERIALS
     syncJitaBuyPrices([
@@ -337,47 +336,13 @@ async function syncMemberTracking(characterId, corpId) {
   }
 }
 
-// ── Mining Ledger ─────────────────────────────────────────────────────────────
-async function syncMiningLedger(characterId, corpId) {
-  try {
-    const data = await esiGetAll(`/corporations/${corpId}/mining/ledger/`, { characterId });
-    const charIds = [...new Set(data.map(m => m.character_id).filter(Boolean))];
-    const nameMap = charIds.length ? await resolveNames(charIds) : {};
-
-    const upsert = db.prepare(`
-      INSERT INTO mining_ledger
-        (character_id, character_name, main_name, type_id, type_name, quantity, date, synced_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(character_id, type_id, date) DO UPDATE SET
-        quantity  = excluded.quantity,
-        main_name = excluded.main_name,
-        synced_at = excluded.synced_at
-    `);
-    const doUpsert = db.transaction(list => { for (const r of list) upsert.run(...r); });
-    const now = Math.floor(Date.now() / 1000);
-
-    const rows = data.map(m => {
-      const charName = nameMap[m.character_id] || `ID:${m.character_id}`;
-      const mapping  = db.prepare('SELECT main_name FROM alt_mappings WHERE character_id = ?').get(m.character_id);
-      const mainName = mapping?.main_name || charName;
-      const typeName = getCachedName(m.type_id)?.name || `Type ${m.type_id}`;
-      const date     = (m.last_updated || '').slice(0, 10);
-      return [m.character_id, charName, mainName, m.type_id, typeName, m.quantity, date, now];
-    });
-    doUpsert(rows);
-
-    setSyncStatus('mining');
-    console.log(`[Sync] Mining ledger: ${data.length} entries`);
-  } catch (err) {
-    setSyncStatus('mining', err.message);
-    console.error('[Sync] Mining ledger error:', err.message);
-  }
-}
-
-// ── Mining Observers (Metenox moon ore) ───────────────────────────────────────
+// ── Mining Observers (Athanor, Tatara, Metenox, etc. — all Upwell refineries with observers) ─
+// CCP: "Refineries with no mining events will not be shown on this list." List is cached 1h.
+// So empty list can mean: no mining recorded yet, or cache from before first mining, or backend delay.
 async function syncMiningObservers(characterId, corpId) {
   try {
     const observers = await esiGetAll(`/corporations/${corpId}/mining/observers/`, { characterId });
+    console.log(`[Sync] Mining observers list: ${observers.length} structure(s)`, observers.map(o => `${o.observer_id} (${o.observer_type})`));
     const upsert = db.prepare(`
       INSERT INTO mining_observers
         (observer_id, character_id, type_id, type_name, quantity, last_updated, synced_at)
@@ -407,7 +372,7 @@ async function syncMiningObservers(characterId, corpId) {
     await syncJitaBuyPrices([...allTypeIds]);
 
     setSyncStatus('observers');
-    console.log(`[Sync] Mining observers: ${observers.length} Metenox structures synced`);
+    console.log(`[Sync] Mining observers: ${observers.length} structure(s) synced (Athanor/Tatara/Metenox etc.)`);
   } catch (err) {
     setSyncStatus('observers', err.message);
     console.error('[Sync] Mining observers error:', err.message);
@@ -591,13 +556,10 @@ function startScheduler(characterId) {
     if (t) syncMemberTracking(_characterId, t.corporation_id);
   });
 
-  // Mining ledger + observers — every 3 hours
+  // Mining observers (Athanor/Tatara/Metenox) — every 3 hours
   cron.schedule('0 */3 * * *', () => {
     const t = getToken(_characterId);
-    if (t) {
-      syncMiningLedger(_characterId, t.corporation_id);
-      syncMiningObservers(_characterId, t.corporation_id);
-    }
+    if (t) syncMiningObservers(_characterId, t.corporation_id);
   });
 
   // Corp kills — every 6 hours

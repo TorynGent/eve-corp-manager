@@ -282,10 +282,16 @@ function getToken(characterId) {
   return row;
 }
 
-function updateAccessToken(characterId, accessToken, expiresAt) {
+function updateAccessToken(characterId, accessToken, expiresAt, refreshToken = null) {
   const encrypted = encryptValue(accessToken);
-  db.prepare('UPDATE tokens SET access_token = ?, expires_at = ? WHERE character_id = ?')
-    .run(encrypted, expiresAt, characterId);
+  if (refreshToken != null) {
+    const encRefresh = encryptValue(refreshToken);
+    db.prepare('UPDATE tokens SET access_token = ?, expires_at = ?, refresh_token = ? WHERE character_id = ?')
+      .run(encrypted, expiresAt, encRefresh, characterId);
+  } else {
+    db.prepare('UPDATE tokens SET access_token = ?, expires_at = ? WHERE character_id = ?')
+      .run(encrypted, expiresAt, characterId);
+  }
 }
 
 function getSetting(key, defaultValue = null) {

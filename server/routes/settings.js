@@ -186,24 +186,19 @@ router.post('/restore', requireAuth, (req, res, next) => {
   });
 });
 
-// GET /api/settings/corp-rates — ISK tax %, mining tax % (for wallet/mining display)
+// GET /api/settings/corp-rates — ISK tax % (for wallet display)
 router.get('/corp-rates', requireAuth, (req, res) => {
   res.json({
     taxRatePercent: getSetting('corp_tax_rate') != null && getSetting('corp_tax_rate') !== ''
       ? parseFloat(getSetting('corp_tax_rate')) : null,
-    miningTaxRatePercent: getSetting('corp_mining_tax_rate') != null && getSetting('corp_mining_tax_rate') !== ''
-      ? parseFloat(getSetting('corp_mining_tax_rate')) : null,
   });
 });
 
 // PUT /api/settings/corp-rates
 router.put('/corp-rates', requireAuth, (req, res) => {
-  const { taxRatePercent, miningTaxRatePercent } = req.body;
+  const { taxRatePercent } = req.body;
   if (taxRatePercent !== undefined) {
     setSetting('corp_tax_rate', (taxRatePercent === null || taxRatePercent === '') ? '' : String(Math.max(0, Math.min(100, parseFloat(taxRatePercent) || 0))));
-  }
-  if (miningTaxRatePercent !== undefined) {
-    setSetting('corp_mining_tax_rate', (miningTaxRatePercent === null || miningTaxRatePercent === '') ? '' : String(Math.max(0, Math.min(100, parseFloat(miningTaxRatePercent) || 0))));
   }
   res.json({ ok: true });
 });

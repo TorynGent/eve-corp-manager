@@ -24,13 +24,13 @@ async function loadHealth() {
     const lbl = document.getElementById('health-weights-label');
     if (lbl) {
       const w = data.weights;
-      lbl.textContent = `Tax ${w.tax}% · Mining ${w.mining}% · Kills ${w.kills}% · Activity ${w.activity}%` +
+      lbl.textContent = `Tax ${w.tax}% · Kills ${w.kills}% · Activity ${w.activity}%` +
         (w.fatPap > 0 ? ` · FAT/PAP ${w.fatPap}%` : '');
     }
   } catch (err) {
     const tbody = document.getElementById('health-tbody');
     if (tbody) tbody.innerHTML =
-      `<tr><td colspan="10" class="alert alert-error">Error: ${esc(err.message)}</td></tr>`;
+      `<tr><td colspan="9" class="alert alert-error">Error: ${esc(err.message)}</td></tr>`;
   }
 }
 
@@ -130,7 +130,6 @@ function renderHealthTable(data) {
         </div>
       </td>
       <td style="min-width:80px">${miniBar(m.taxScore, 'var(--green)')}</td>
-      <td style="min-width:80px">${miniBar(m.miningScore, 'var(--blue)')}</td>
       <td style="min-width:80px">${miniBar(m.killScore, 'var(--red)')}</td>
       <td style="min-width:80px">${miniBar(m.activityScore, 'var(--purple)')}</td>
       <td style="min-width:90px">${fatPapCell}</td>

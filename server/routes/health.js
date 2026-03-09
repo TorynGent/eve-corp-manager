@@ -48,7 +48,6 @@ function readFatPapPoints() {
 router.get('/weights', requireAuth, (req, res) => {
   res.json({
     weightTax:          parseInt(getSetting('health_weight_tax',           '30'), 10),
-    weightMining:       parseInt(getSetting('health_weight_mining',        '30'), 10),
     weightKills:        parseInt(getSetting('health_weight_kills',         '20'), 10),
     weightActivity:     parseInt(getSetting('health_weight_activity',      '20'), 10),
     weightFatPap:       parseInt(getSetting('health_weight_fatpap',         '0'), 10),
@@ -62,7 +61,6 @@ router.get('/weights', requireAuth, (req, res) => {
 router.put('/weights', requireAuth, (req, res) => {
   const fields = {
     'health_weight_tax':          req.body.weightTax,
-    'health_weight_mining':       req.body.weightMining,
     'health_weight_kills':        req.body.weightKills,
     'health_weight_activity':     req.body.weightActivity,
     'health_weight_fatpap':       req.body.weightFatPap,
@@ -104,7 +102,6 @@ router.put('/fat-pap-overrides', requireAuth, (req, res) => {
 
 router.get('/members', requireAuth, (req, res) => {
   const wTax         = parseInt(getSetting('health_weight_tax',          '30'), 10);
-  const wMining      = parseInt(getSetting('health_weight_mining',       '30'), 10);
   const wKills       = parseInt(getSetting('health_weight_kills',        '20'), 10);
   const wActivity    = parseInt(getSetting('health_weight_activity',     '20'), 10);
   const wFatPap      = parseInt(getSetting('health_weight_fatpap',        '0'), 10);
@@ -141,7 +138,7 @@ router.get('/members', requireAuth, (req, res) => {
   if (mains.size === 0) {
     return res.json({
       members: [],
-      weights: { tax: wTax, mining: wMining, kills: wKills, activity: wActivity, fatPap: wFatPap },
+      weights: { tax: wTax, kills: wKills, activity: wActivity, fatPap: wFatPap },
       inactiveDays: inactiveD,
       thresholds: { hardcore: tHardcore, active: tActive, atRisk: tAtRisk },
       summary: { hardcore: 0, active: 0, atRisk: 0, inactive: 0, total: 0 },
@@ -160,17 +157,7 @@ router.get('/members', requireAuth, (req, res) => {
   `).all(cutoff, ...TAX_REF_TYPES);
   const taxByChar = new Map(taxRows.map(r => [r.cid, r.total]));
 
-  // ── 3. Mining ──────────────────────────────────────────────────────────
-  const miningRows = db.prepare(`
-    SELECT ml.character_id AS cid, SUM(ml.quantity * COALESCE(mp.jita_buy_max, 0)) AS value
-    FROM mining_ledger ml
-    LEFT JOIN market_prices mp ON mp.type_id = ml.type_id
-    WHERE ml.date >= ?
-    GROUP BY ml.character_id
-  `).all(cutoff);
-  const miningByChar = new Map(miningRows.map(r => [r.cid, r.value]));
-
-  // ── 4. Kills ───────────────────────────────────────────────────────────
+  // ── 3. Kills ───────────────────────────────────────────────────────────
   const killRows = db.prepare(
     'SELECT attackers_json FROM corp_kills WHERE kill_time >= ?'
   ).all(cutoff);
@@ -203,9 +190,8 @@ router.get('/members', requireAuth, (req, res) => {
     const ids   = [...entry.charIds];
     const names = [...entry.charNames];
 
-    const taxAmount   = ids.reduce((s, id)   => s + (taxByChar.get(id)    || 0), 0);
-    const miningValue = ids.reduce((s, id)   => s + (miningByChar.get(id) || 0), 0);
-    const killCount   = ids.reduce((s, id)   => s + (killsByChar.get(id)  || 0), 0);
+    const taxAmount   = ids.reduce((s, id) => s + (taxByChar.get(id)   || 0), 0);
+    const killCount   = ids.reduce((s, id) => s + (killsByChar.get(id) || 0), 0);
     const daysSinceLogin = entry.maxLogon
       ? (now - new Date(entry.maxLogon).getTime()) / 86400000
       : inactiveD;
@@ -225,27 +211,24 @@ router.get('/members', requireAuth, (req, res) => {
       mainName: entry.mainName,
       altCount: entry.altCount,
       taxAmount,
-      miningValue,
       killCount,
       fatPapPoints,
       hasManualFatPap: fatPapOverrides[entry.mainName] !== undefined,
       daysSinceLogin: parseFloat(daysSinceLogin.toFixed(1)),
-      taxScore: 0, miningScore: 0, killScore: 0, activityScore: 0, fatPapScore: 0,
+      taxScore: 0, killScore: 0, activityScore: 0, fatPapScore: 0,
       healthScore: 0, status: 'inactive',
     });
   }
 
   // ── 7. Log-normalize each metric (compresses outliers) ─────────────────
   const maxTax    = Math.max(...results.map(r => r.taxAmount),    0);
-  const maxMining = Math.max(...results.map(r => r.miningValue),  0);
   const maxKills  = Math.max(...results.map(r => r.killCount),    0);
   const maxFatPap = Math.max(...results.map(r => r.fatPapPoints), 0);
 
   for (const r of results) {
-    r.taxScore     = parseFloat(logNorm(r.taxAmount,    maxTax).toFixed(1));
-    r.miningScore  = parseFloat(logNorm(r.miningValue,  maxMining).toFixed(1));
-    r.killScore    = parseFloat(logNorm(r.killCount,    maxKills).toFixed(1));
-    r.fatPapScore  = parseFloat(logNorm(r.fatPapPoints, maxFatPap).toFixed(1));
+    r.taxScore    = parseFloat(logNorm(r.taxAmount,    maxTax).toFixed(1));
+    r.killScore   = parseFloat(logNorm(r.killCount,    maxKills).toFixed(1));
+    r.fatPapScore = parseFloat(logNorm(r.fatPapPoints, maxFatPap).toFixed(1));
     r.activityScore = parseFloat(
       Math.max(0, 100 - r.daysSinceLogin * (100 / inactiveD)).toFixed(1)
     );
@@ -253,7 +236,6 @@ router.get('/members', requireAuth, (req, res) => {
     // Total weight for weighting (handles weightFatPap = 0 gracefully)
     const composite = (
       r.taxScore      * wTax      +
-      r.miningScore   * wMining   +
       r.killScore     * wKills    +
       r.activityScore * wActivity +
       r.fatPapScore   * wFatPap
@@ -286,7 +268,7 @@ router.get('/members', requireAuth, (req, res) => {
 
   res.json({
     members: results,
-    weights: { tax: wTax, mining: wMining, kills: wKills, activity: wActivity, fatPap: wFatPap },
+    weights: { tax: wTax, kills: wKills, activity: wActivity, fatPap: wFatPap },
     inactiveDays: inactiveD,
     thresholds: { hardcore: tHardcore, active: tActive, atRisk: tAtRisk },
     summary,
