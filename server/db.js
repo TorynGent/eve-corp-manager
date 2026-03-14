@@ -196,6 +196,21 @@ CREATE TABLE IF NOT EXISTS corp_kills (
 
 CREATE INDEX IF NOT EXISTS idx_ck_time ON corp_kills(kill_time);
 
+CREATE TABLE IF NOT EXISTS corp_losses (
+  kill_id           INTEGER PRIMARY KEY,
+  kill_time         TEXT,
+  victim_char_id    INTEGER,
+  victim_char_name  TEXT,
+  victim_ship_id    INTEGER,
+  victim_ship_name  TEXT,
+  solar_system_id   INTEGER,
+  solar_system_name TEXT,
+  total_value       REAL,
+  synced_at         INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_cl_time ON corp_losses(kill_time);
+
 CREATE TABLE IF NOT EXISTS metenox_manual_materials (
   structure_id  INTEGER,
   type_id       INTEGER,
@@ -203,6 +218,34 @@ CREATE TABLE IF NOT EXISTS metenox_manual_materials (
   qty_per_hour  REAL,
   PRIMARY KEY (structure_id, type_id)
 );
+
+CREATE TABLE IF NOT EXISTS corp_contracts (
+  contract_id        INTEGER PRIMARY KEY,
+  issuer_id          INTEGER,
+  issuer_name        TEXT,
+  issuer_corp_id     INTEGER,
+  assignee_id        INTEGER,
+  type               TEXT,
+  status             TEXT,
+  title              TEXT,
+  for_corporation    INTEGER DEFAULT 0,
+  availability       TEXT,
+  date_issued        TEXT,
+  date_expired       TEXT,
+  date_accepted      TEXT,
+  date_completed     TEXT,
+  price              REAL DEFAULT 0,
+  reward             REAL DEFAULT 0,
+  collateral         REAL DEFAULT 0,
+  volume             REAL DEFAULT 0,
+  start_location_id  INTEGER,
+  end_location_id    INTEGER,
+  notified           INTEGER DEFAULT 0,
+  synced_at          INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_cc_status  ON corp_contracts(status);
+CREATE INDEX IF NOT EXISTS idx_cc_issued  ON corp_contracts(date_issued);
 `);
 
 // Schema migrations (add columns added after initial deploy)

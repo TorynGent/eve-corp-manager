@@ -132,6 +132,8 @@ async function loadNotificationSettings() {
     document.getElementById('gas-threshold').value   = cfg.gasThresholdDays  || 7;
     document.getElementById('fuel-threshold-val').textContent = (cfg.fuelThresholdDays || 14) + ' days';
     document.getElementById('gas-threshold-val').textContent  = (cfg.gasThresholdDays  || 7)  + ' days';
+    document.getElementById('notif-enabled').checked          = cfg.enabled !== 'false';
+    document.getElementById('contract-notif-enabled').checked = cfg.contractNotificationsEnabled !== 'false';
 
     // Load notification log
     const log = await api.get('/api/settings/notifications/log');
@@ -139,13 +141,13 @@ async function loadNotificationSettings() {
     if (!log.length) {
       logEl.innerHTML = '<p class="dim" style="font-size:0.8rem">No alerts sent yet.</p>'; return;
     }
-    logEl.innerHTML = `<table><thead><tr><th>Structure</th><th>Type</th><th>Days Remaining</th><th>Sent</th></tr></thead>
+    logEl.innerHTML = `<div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:4px"><table style="margin:0"><thead><tr><th>Structure</th><th>Type</th><th>Days Remaining</th><th>Sent</th></tr></thead>
       <tbody>${log.map(l => `<tr>
         <td>${l.structure_name || 'ID:'+l.structure_id}</td>
         <td>${l.alert_type === 'fuel' ? '⛽ Fuel' : '💨 Gas'}</td>
         <td class="${fuelClass(l.days_remaining)}">${l.days_remaining?.toFixed(1)}d</td>
         <td class="dim">${fmtDate(new Date(l.sent_at * 1000).toISOString())}</td>
-      </tr>`).join('')}</tbody></table>`;
+      </tr>`).join('')}</tbody></table></div>`;
   } catch (err) { console.error('Notification settings load error:', err); }
 }
 
@@ -167,9 +169,11 @@ document.getElementById('btn-save-notif').addEventListener('click', async () => 
       smtpUser:         document.getElementById('smtp-user').value,
       smtpFrom:         document.getElementById('smtp-from').value,
       recipients:       document.getElementById('smtp-recipients').value,
-      fuelThresholdDays: document.getElementById('fuel-threshold').value,
-      gasThresholdDays:  document.getElementById('gas-threshold').value,
-      discordWebhookUrl: document.getElementById('discord-webhook-url').value.trim(),
+      fuelThresholdDays:              document.getElementById('fuel-threshold').value,
+      gasThresholdDays:               document.getElementById('gas-threshold').value,
+      discordWebhookUrl:              document.getElementById('discord-webhook-url').value.trim(),
+      enabled:                        document.getElementById('notif-enabled').checked ? 'true' : 'false',
+      contractNotificationsEnabled:   document.getElementById('contract-notif-enabled').checked ? 'true' : 'false',
     };
     if (passEl.value) body.smtpPass = passEl.value;
     await api.put('/api/settings/notifications', body);
@@ -402,10 +406,42 @@ document.getElementById('restore-file-input')?.addEventListener('change', async 
   e.target.value = '';
 });
 
+// ── Tab Visibility ─────────────────────────────────────────────────────────────
+async function loadTabVisibilitySettings() {
+  try {
+    const vis = await api.get('/api/settings/tabs');
+    const tabs = ['structures', 'metenox', 'wallet', 'kills', 'contracts', 'health'];
+    tabs.forEach(t => {
+      const cb = document.getElementById(`tab-vis-${t}`);
+      if (cb) cb.checked = vis[t] !== false;
+    });
+  } catch (err) { console.error('Tab visibility load error:', err); }
+}
+
+// Save on any checkbox change
+document.getElementById('tab-visibility-controls').addEventListener('change', async () => {
+  const tabs = ['structures', 'metenox', 'wallet', 'kills', 'contracts', 'health'];
+  const vis = {};
+  tabs.forEach(t => {
+    const cb = document.getElementById(`tab-vis-${t}`);
+    vis[t] = cb ? cb.checked : true;
+  });
+  try {
+    await api.put('/api/settings/tabs', vis);
+    applyTabVisibility(vis); // defined in app.js
+  } catch (err) { toast('Error saving tab settings: ' + err.message, 'error'); }
+});
+
+// Show Tutorial button
+document.getElementById('btn-show-tutorial').addEventListener('click', () => {
+  showTutorialModal(); // defined in app.js
+});
+
 function loadSettings() {
   loadMappings();
   loadSyncStatus();
   loadDisplaySettings();
+  loadTabVisibilitySettings();
   loadHealthWeights();
   loadNotificationSettings();
   loadFuelHangar();

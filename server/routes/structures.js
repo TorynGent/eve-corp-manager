@@ -221,6 +221,13 @@ router.get('/inventory', requireAuth, async (req, res) => {
       return { structure_name: cached.name, system_name: '' };
     }
 
+    // 2.5. This ID may be a rented office or container sitting inside an actual structure.
+    // Walk up one level by looking it up as an item_id in assets.
+    const parentAsset = db.prepare('SELECT location_id FROM assets WHERE item_id = ? LIMIT 1').get(locationId);
+    if (parentAsset) {
+      return locLabel(parentAsset.location_id);
+    }
+
     // 3. Try the location_name stored in the assets table during the last sync
     const assetLoc = db.prepare(
       `SELECT MAX(location_name) AS ln FROM assets WHERE location_id = ?`
@@ -266,7 +273,9 @@ router.get('/inventory', requireAuth, async (req, res) => {
   for (const locId of allLocIds) {
     if (!structureMap[String(locId)]) {
       const cached = db.prepare('SELECT name FROM name_cache WHERE id = ?').get(locId);
-      if (!cached?.name) {
+      // Only attempt ESI resolution if never tried before — skip 'failed' entries (empty name)
+      // to avoid burning error budget on every page load. Retries happen in the sync scheduler.
+      if (!cached) {
         await resolveStructureName(locId, characterId).catch(() => {});
       }
     }

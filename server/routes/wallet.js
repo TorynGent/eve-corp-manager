@@ -104,6 +104,7 @@ router.get('/rates', requireAuth, (req, res) => {
 /**
  * GET /api/wallet/monthly-flow?months=12
  * Income vs expenses vs net per calendar month for the last N months.
+ * Covers all wallet divisions (matches multi-pnl consolidated view).
  * Excludes same-corp corporation_account_withdrawal (inter-division transfers).
  */
 router.get('/monthly-flow', requireAuth, (req, res) => {
@@ -128,8 +129,7 @@ router.get('/monthly-flow', requireAuth, (req, res) => {
       SUM(CASE WHEN amount > 0 THEN amount      ELSE 0 END) AS income,
       SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) AS expenses
     FROM wallet_journal
-    WHERE division = 1
-      AND substr(date, 1, 7) >= ?
+    WHERE substr(date, 1, 7) >= ?
       AND NOT (
         ref_type = 'corporation_account_withdrawal'
         AND (second_party_id = ? OR second_party_id IS NULL)

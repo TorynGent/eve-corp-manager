@@ -14,7 +14,8 @@ const REQUIRED_SCOPES = [
   'esi-corporations.track_members.v1',
   'esi-industry.read_corporation_mining.v1',
   'esi-assets.read_corporation_assets.v1',
-  'esi-universe.read_structures.v1',  // resolve alliance/other-corp structure names
+  'esi-universe.read_structures.v1',   // resolve alliance/other-corp structure names
+  'esi-contracts.read_corporation_contracts.v1',
 ];
 
 const SCOPES = REQUIRED_SCOPES.join(' ');

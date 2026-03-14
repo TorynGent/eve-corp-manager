@@ -1,7 +1,7 @@
 'use strict';
 const cron   = require('node-cron');
 const { esiGet, esiGetAll, resolveNames, resolveStructureName, resolveSystemName, resolveTypeName } = require('./esi');
-const { db, setSyncStatus, getToken, getCachedName, setSetting } = require('./db');
+const { db, setSyncStatus, getToken, getCachedName, cacheName, setSetting } = require('./db');
 
 const METENOX_TYPE_ID   = 81826;
 const JITA_REGION_ID    = 10000002;
@@ -23,6 +23,7 @@ async function runFullSync(characterId) {
     syncMarketPrices(),
     syncMemberTracking(characterId, corpId),
     syncMiningObservers(characterId, corpId),
+    syncContracts(characterId, corpId),
     // Always sync Jita buy prices: fuel blocks + magmatic gas + all R4–R64 moon MATERIALS
     syncJitaBuyPrices([
       4051, 4246, 4247, 4312,     // Caldari / Gallente / Amarr / Minmatar Fuel Blocks
@@ -39,8 +40,14 @@ async function runFullSync(characterId) {
       16650, 16651, 16652, 16653, // Dysprosium, Neodymium, Promethium, Thulium
     ]),
   ]);
-  // Kills use external API — run after main sync
+  // Kills + losses use external API — run after main sync
   await syncKills(corpId).catch(e => console.error('[Sync] Kills error:', e.message));
+  await syncLosses(corpId).catch(e => console.error('[Sync] Losses error:', e.message));
+
+  // Check fuel/gas thresholds after every sync (notification_log deduplicates within 24h)
+  const { checkAndNotify } = require('./notifications');
+  await checkAndNotify().catch(e => console.error('[Notifications] checkAndNotify error:', e.message));
+
   console.log('[Sync] Full sync complete');
 }
 
@@ -212,21 +219,20 @@ async function syncAssets(characterId, corpId) {
 
     // Categorise location IDs by type
     const stationLocIds       = new Set();
-    const unknownStructureIds = new Set(); // alliance / other-corp structures
+    const unknownStructureIds = new Set(); // alliance / other-corp structures (dockable)
 
     for (const a of data) {
       if (a.location_type === 'station' || a.location_type === 'solar_system') {
         stationLocIds.add(a.location_id);
       } else if (a.location_type === 'other') {
         if (knownStructures[a.location_id]) {
-          // Corp-owned: already have the name from the structures table
           locNames[a.location_id] = knownStructures[a.location_id];
         } else {
-          // Alliance / other-corp structure — resolve separately
           unknownStructureIds.add(a.location_id);
         }
       }
-      // 'item' → inside container; location_id is a game item ID, not resolvable — skip
+      // 'item' → office/container item_id, not a structure — locLabel() walks the parent
+      //          chain at display time instead; no ESI call needed or appropriate here.
     }
 
     // Batch-resolve NPC station names (one POST for all, no auth needed)
@@ -408,6 +414,118 @@ async function syncJitaBuyPrices(typeIds) {
   console.log(`[Sync] Jita buy prices: ${typeIds.length} types`);
 }
 
+// ── Corp Contracts ────────────────────────────────────────────────────────────
+async function syncContracts(characterId, corpId) {
+  try {
+    const data = await esiGetAll(`/corporations/${corpId}/contracts/`, { characterId });
+
+    // Resolve issuer names in bulk
+    const issuerIds = [...new Set(data.map(c => c.issuer_id).filter(Boolean))];
+    const issuerNames = issuerIds.length ? await resolveNames(issuerIds) : {};
+
+    const now = Math.floor(Date.now() / 1000);
+    const newForCorp = [];
+
+    const upsert = db.prepare(`
+      INSERT INTO corp_contracts
+        (contract_id, issuer_id, issuer_name, issuer_corp_id, assignee_id,
+         type, status, title, for_corporation, availability,
+         date_issued, date_expired, date_accepted, date_completed,
+         price, reward, collateral, volume, start_location_id, end_location_id,
+         notified, synced_at)
+      VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?, ?,?,?,?,?,?, ?,?)
+      ON CONFLICT(contract_id) DO UPDATE SET
+        status         = excluded.status,
+        date_accepted  = excluded.date_accepted,
+        date_completed = excluded.date_completed,
+        synced_at      = excluded.synced_at
+    `);
+    const doUpsert = db.transaction(list => { for (const r of list) upsert.run(...r); });
+
+    const rows = [];
+    for (const c of data) {
+      const existing  = db.prepare('SELECT notified FROM corp_contracts WHERE contract_id = ?').get(c.contract_id);
+      const isNew     = !existing;
+      const isForCorp = isNew && c.assignee_id === corpId && c.status === 'outstanding';
+
+      if (isForCorp) {
+        newForCorp.push({
+          contractId: c.contract_id,
+          type:       c.type || 'unknown',
+          title:      c.title || '(no title)',
+          issuerName: issuerNames[c.issuer_id] || `ID:${c.issuer_id}`,
+          price:      c.price  || 0,
+          reward:     c.reward || 0,
+          dateExpired: c.date_expired || null,
+        });
+      }
+
+      rows.push([
+        c.contract_id,
+        c.issuer_id          || null,
+        issuerNames[c.issuer_id] || null,
+        c.issuer_corporation_id || null,
+        c.assignee_id        || null,
+        c.type               || null,
+        c.status             || null,
+        c.title              || null,
+        c.for_corporation    ? 1 : 0,
+        c.availability       || null,
+        c.date_issued        || null,
+        c.date_expired       || null,
+        c.date_accepted      || null,
+        c.date_completed     || null,
+        c.price      || 0,
+        c.reward     || 0,
+        c.collateral || 0,
+        c.volume     || 0,
+        c.start_location_id || null,
+        c.end_location_id   || null,
+        isForCorp ? 0 : 1, // notified=0 means "new, unseen"
+        now,
+      ]);
+    }
+    doUpsert(rows);
+
+    // Resolve location names for all unique start_location_ids not yet cached
+    const locationIds = [...new Set(data.map(c => c.start_location_id).filter(Boolean))];
+    for (const id of locationIds) {
+      if (getCachedName(id)) continue;
+      try {
+        if (id < 100_000_000) {
+          // NPC station — public endpoint, no auth needed
+          const res = await esiGet(`/universe/stations/${id}/`);
+          if (res?.name) cacheName(id, res.name, 'station');
+        } else {
+          // Player-owned structure — may return 403 if corp disallows ESI access
+          await resolveStructureName(id, characterId);
+        }
+      } catch { /* best effort */ }
+    }
+
+    // Send notifications for new contracts assigned to corp
+    if (newForCorp.length > 0) {
+      const { sendContractAlerts } = require('./notifications');
+      try {
+        await sendContractAlerts(newForCorp);
+        db.prepare('UPDATE corp_contracts SET notified = 1 WHERE contract_id = ?')
+          .run; // mark after send — mark individually
+        for (const c of newForCorp) {
+          db.prepare('UPDATE corp_contracts SET notified = 1 WHERE contract_id = ?').run(c.contractId);
+        }
+      } catch (e) {
+        console.error('[Sync] Contract notification error:', e.message);
+      }
+    }
+
+    setSyncStatus('contracts');
+    console.log(`[Sync] Contracts: ${data.length} total, ${newForCorp.length} new for corp`);
+  } catch (err) {
+    setSyncStatus('contracts', err.message);
+    console.error('[Sync] Contracts error:', err.message);
+  }
+}
+
 // ── Corp Kills (zKillboard + ESI killmails) ───────────────────────────────────
 async function syncKills(corpId) {
   const axios = require('axios');
@@ -474,6 +592,80 @@ async function syncKills(corpId) {
   } catch (err) {
     setSyncStatus('kills', err.message);
     console.error('[Sync] Kills error:', err.message);
+  }
+}
+
+// ── Corp Losses (zKillboard + ESI killmails) ──────────────────────────────────
+async function syncLosses(corpId) {
+  const axios = require('axios');
+  try {
+    const zkbRes = await axios.get(
+      `https://zkillboard.com/api/losses/corporationID/${corpId}/`,
+      { headers: { 'User-Agent': 'EVE-Corp-Dashboard/1.0' }, timeout: 30000 }
+    );
+    const losses = zkbRes.data || [];
+
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO corp_losses
+        (kill_id, kill_time, victim_char_id, victim_char_name,
+         victim_ship_id, victim_ship_name, solar_system_id, solar_system_name,
+         total_value, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const insertAll = db.transaction(list => { for (const r of list) insert.run(...r); });
+    const now = Math.floor(Date.now() / 1000);
+
+    const newLosses = losses.filter(k =>
+      !db.prepare('SELECT kill_id FROM corp_losses WHERE kill_id = ?').get(k.killmail_id)
+    );
+
+    const rows = [];
+    const charIds = new Set();
+
+    for (const k of newLosses.slice(0, 50)) {
+      try {
+        const hash = k.zkb?.hash;
+        if (!hash) continue;
+        const km         = await esiGet(`/killmails/${k.killmail_id}/${hash}/`);
+        const systemName = await resolveSystemName(km.solar_system_id);
+        const shipName   = km.victim?.ship_type_id ? await resolveTypeName(km.victim.ship_type_id) : null;
+
+        if (km.victim?.character_id) charIds.add(km.victim.character_id);
+
+        rows.push([
+          km.killmail_id,
+          km.killmail_time,
+          km.victim?.character_id    || null,
+          null, // resolved in bulk below
+          km.victim?.ship_type_id    || null,
+          shipName,
+          km.solar_system_id         || null,
+          systemName,
+          k.zkb?.totalValue          || 0,
+          now,
+        ]);
+      } catch { /* skip individual kill errors */ }
+    }
+    if (rows.length) insertAll(rows);
+
+    // Bulk-resolve victim character names
+    if (charIds.size > 0) {
+      await resolveNames([...charIds]).catch(() => {});
+      // Backfill victim_char_name from name_cache
+      for (const cid of charIds) {
+        const nc = db.prepare('SELECT name FROM name_cache WHERE id = ?').get(cid);
+        if (nc?.name) {
+          db.prepare('UPDATE corp_losses SET victim_char_name = ? WHERE victim_char_id = ? AND victim_char_name IS NULL')
+            .run(nc.name, cid);
+        }
+      }
+    }
+
+    setSyncStatus('losses');
+    console.log(`[Sync] Losses: ${rows.length} new losses synced`);
+  } catch (err) {
+    setSyncStatus('losses', err.message);
+    console.error('[Sync] Losses error:', err.message);
   }
 }
 
@@ -568,9 +760,15 @@ function startScheduler(characterId) {
     if (t) syncKills(t.corporation_id);
   });
 
+  // Contracts — every 15 min
+  cron.schedule('*/15 * * * *', () => {
+    const t = getToken(_characterId);
+    if (t) syncContracts(_characterId, t.corporation_id);
+  });
+
   console.log('[Scheduler] Cron jobs started');
 }
 
 function updateSchedulerCharacter(characterId) { _characterId = characterId; }
 
-module.exports = { startScheduler, updateSchedulerCharacter, runFullSync, createMonthlySnapshot, syncKills };
+module.exports = { startScheduler, updateSchedulerCharacter, runFullSync, createMonthlySnapshot, syncKills, syncLosses, syncContracts };

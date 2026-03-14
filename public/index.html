@@ -69,6 +69,7 @@
     <div class="nav-tab" data-tab="metenox">Metenox</div>
     <div class="nav-tab" data-tab="wallet">Wallet &amp; Tax</div>
     <div class="nav-tab" data-tab="kills">Corp Kills</div>
+    <div class="nav-tab" data-tab="contracts">Contracts <span id="contracts-new-badge" class="badge badge-warning" style="display:none;font-size:10px;padding:1px 5px;vertical-align:middle"></span></div>
     <div class="nav-tab" data-tab="health">Member Health</div>
     <div class="nav-tab" data-tab="settings">Settings</div>
   </nav>
@@ -301,33 +302,62 @@
 
     <!-- ─── CORP KILLS ────────────────────────── -->
     <div class="tab-panel" id="tab-kills">
+      <!-- Period controls + Sync button row -->
+      <div class="card mb-20" style="padding:12px 16px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:0.8rem;color:var(--text-dim)">Period:</span>
+          <span class="period-presets">
+            <button type="button" class="btn btn-ghost btn-small kills-period-preset" data-period="rolling30">Last 30 days</button>
+            <button type="button" class="btn btn-ghost btn-small kills-period-preset" data-period="this">This month</button>
+            <button type="button" class="btn btn-ghost btn-small kills-period-preset" data-period="last">Last month</button>
+          </span>
+          <select id="kills-period" style="width:auto;padding:3px 6px;font-size:0.72rem"></select>
+          <span id="kills-period-label" style="font-size:0.72rem;color:var(--text-dim)"></span>
+          <button class="btn btn-ghost btn-small btn-sync-kills" style="margin-left:auto">⟳ Sync Kills</button>
+        </div>
+      </div>
+
+      <!-- Kills: top10 + doughnut -->
       <div class="grid-2 mb-20">
         <div class="card">
-          <div class="card-title">Top 10 Killers
-            <span class="period-presets" style="margin-left:8px">
-              <button type="button" class="btn btn-ghost btn-small kills-period-preset" data-period="rolling30">Last 30 days</button>
-              <button type="button" class="btn btn-ghost btn-small kills-period-preset" data-period="this">This month</button>
-              <button type="button" class="btn btn-ghost btn-small kills-period-preset" data-period="last">Last month</button>
-            </span>
-            <select id="kills-period" style="margin-left:10px;width:auto;padding:3px 6px;font-size:0.72rem;display:inline-block"></select>
-            <span id="kills-period-label" style="margin-left:8px;font-size:0.72rem;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400"></span>
-          </div>
+          <div class="card-title">Top 10 Killers</div>
           <div id="kills-top10"><div class="loading"><span class="spinner"></span></div></div>
         </div>
         <div class="card">
-          <div class="card-title">Kills Chart</div>
-          <canvas id="chart-kills"></canvas>
+          <div class="card-title">Kills by Pilot <span style="font-weight:400;font-size:0.72rem;color:var(--text-dim);letter-spacing:0;text-transform:none">· icon = favourite ship</span></div>
+          <div style="display:flex;gap:14px;align-items:center">
+            <div style="flex:1;min-width:0"><canvas id="chart-kills"></canvas></div>
+            <div id="kills-pie-legend" style="flex:0 0 auto;width:185px;max-height:260px;overflow-y:auto"></div>
+          </div>
         </div>
       </div>
+
+      <!-- Kill History -->
       <div class="card mb-20">
         <div class="card-title">Kill History — Total kills &amp; ISK destroyed per month</div>
         <p style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px">One point per calendar month with recorded kills.</p>
         <canvas id="chart-kills-history" style="max-height:280px"></canvas>
       </div>
+
+      <!-- Losses: top10 + doughnut -->
+      <div class="grid-2 mb-20">
+        <div class="card">
+          <div class="card-title">Top 10 by Losses</div>
+          <div id="losses-top10"><div class="loading"><span class="spinner"></span></div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Losses by Pilot <span style="font-weight:400;font-size:0.72rem;color:var(--text-dim);letter-spacing:0;text-transform:none">· icon = most lost ship</span></div>
+          <div style="display:flex;gap:14px;align-items:center">
+            <div style="flex:1;min-width:0"><canvas id="chart-losses"></canvas></div>
+            <div id="losses-pie-legend" style="flex:0 0 auto;width:185px;max-height:260px;overflow-y:auto"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Kills -->
       <div class="card mb-20">
         <div class="card-title">Recent Kills
           <span id="kills-total" style="margin-left:8px;font-size:0.72rem;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400"></span> total
-          <button class="btn btn-ghost btn-small" id="btn-sync-kills" style="margin-left:auto">⟳ Sync Kills</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -338,6 +368,49 @@
             <tbody id="kills-tbody"><tr><td colspan="5" class="loading"><span class="spinner"></span></td></tr></tbody>
           </table>
         </div>
+      </div>
+
+      <!-- Recent Losses -->
+      <div class="card mb-20">
+        <div class="card-title">Recent Losses
+          <span id="losses-total" style="margin-left:8px;font-size:0.72rem;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400"></span> total
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Date</th><th>Pilot</th><th>Ship Lost</th><th>System</th>
+              <th class="text-right">Value</th><th></th>
+            </tr></thead>
+            <tbody id="losses-tbody"><tr><td colspan="6" class="loading"><span class="spinner"></span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── CONTRACTS ──────────────────────────────── -->
+    <div class="tab-panel" id="tab-contracts">
+      <div class="card mb-20">
+        <div class="card-title">Corp Contracts</div>
+        <!-- Scope (primary) -->
+        <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" class="btn btn-ghost btn-small scope-btn active" data-scope="for_corp">For Corp<span class="filter-count"></span></button>
+          <button type="button" class="btn btn-ghost btn-small scope-btn" data-scope="by_corp">By Corp<span class="filter-count"></span></button>
+          <button type="button" class="btn btn-ghost btn-small scope-btn" data-scope="alliance">Alliance<span class="filter-count"></span></button>
+          <button type="button" class="btn btn-ghost btn-small scope-btn" data-scope="all">All<span class="filter-count"></span></button>
+        </div>
+        <!-- Status (secondary) -->
+        <div style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid var(--border)">
+          <span style="font-size:0.72rem;color:var(--text-dim);align-self:center">Status:</span>
+          <button type="button" class="btn btn-ghost btn-small status-btn active" data-status="outstanding">Outstanding<span class="filter-count"></span></button>
+          <button type="button" class="btn btn-ghost btn-small status-btn" data-status="in_progress">In Progress<span class="filter-count"></span></button>
+          <button type="button" class="btn btn-ghost btn-small status-btn" data-status="finished">Finished<span class="filter-count"></span></button>
+          <button type="button" class="btn btn-ghost btn-small status-btn" data-status="cancelled">Cancelled<span class="filter-count"></span></button>
+          <button type="button" class="btn btn-ghost btn-small status-btn" data-status="all">All<span class="filter-count"></span></button>
+        </div>
+        <div class="table-wrap" id="contracts-table-wrap">
+          <p class="loading"><span class="spinner"></span></p>
+        </div>
+        <div id="contracts-pagination" style="margin-top:10px;display:flex;align-items:center;gap:8px;font-size:0.8rem;color:var(--text-dim)"></div>
       </div>
     </div>
 
@@ -405,6 +478,35 @@
           <span id="display-feedback" style="font-size:0.75rem;color:var(--text-dim)"></span>
         </div>
         <p style="font-size:0.72rem;color:var(--text-dim);margin-top:8px;line-height:1.4">Color blind: blue/orange/magenta palette. Date format applies to all tabs. Fuel month: hours used for automatic fuel-per-month (default 720); set 360 if our value is double in-game.</p>
+      </div>
+
+      <!-- Visible Tabs -->
+      <div class="card mb-20">
+        <div class="card-title">Visible Tabs</div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px 24px;margin-bottom:14px" id="tab-visibility-controls">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85rem">
+            <input type="checkbox" id="tab-vis-structures" style="width:16px;height:16px;accent-color:var(--accent)"> Structures
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85rem">
+            <input type="checkbox" id="tab-vis-metenox" style="width:16px;height:16px;accent-color:var(--accent)"> Metenox
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85rem">
+            <input type="checkbox" id="tab-vis-wallet" style="width:16px;height:16px;accent-color:var(--accent)"> Wallet &amp; Tax
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85rem">
+            <input type="checkbox" id="tab-vis-kills" style="width:16px;height:16px;accent-color:var(--accent)"> Corp Kills
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85rem">
+            <input type="checkbox" id="tab-vis-contracts" style="width:16px;height:16px;accent-color:var(--accent)"> Contracts
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85rem">
+            <input type="checkbox" id="tab-vis-health" style="width:16px;height:16px;accent-color:var(--accent)"> Member Health
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px">
+          <p style="font-size:0.72rem;color:var(--text-dim);margin:0">Overview and Settings are always visible. Changes take effect immediately.</p>
+          <button class="btn btn-ghost btn-small" id="btn-show-tutorial" style="white-space:nowrap;margin-left:auto">? Show Tutorial</button>
+        </div>
       </div>
 
       <div class="grid-2 mb-20">
@@ -582,6 +684,16 @@
             </div>
           </div>
           <div>
+            <div style="margin-bottom:16px;padding:10px;background:var(--bg);border-radius:6px;border:1px solid var(--border)">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="checkbox" id="notif-enabled" style="width:14px;height:14px">
+                Enable fuel &amp; gas structure alerts
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px">
+                <input type="checkbox" id="contract-notif-enabled" style="width:14px;height:14px">
+                Enable new contract notifications
+              </label>
+            </div>
             <div style="margin-bottom:16px">
               <label>Fuel Block Alert Threshold</label>
               <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
@@ -732,6 +844,65 @@
   </div>
 </div>
 
+<!-- ── First Steps Tutorial Modal ────────────────────────────────────── -->
+<div id="tutorial-modal" style="display:none;position:fixed;inset:0;background:rgba(4,8,16,.88);
+  align-items:center;justify-content:center;z-index:9998;overflow-y:auto;padding:24px 12px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:32px 36px;max-width:560px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.7)">
+    <div style="font-size:1.2rem;font-weight:700;margin-bottom:6px;color:var(--accent)">First Steps — Corp Manager</div>
+    <div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:22px">Run through these once to get up and running.</div>
+
+    <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:28px">
+      <div style="display:flex;gap:14px;align-items:flex-start">
+        <div style="min-width:28px;height:28px;border-radius:50%;background:var(--accent);color:#0a0f1e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem">1</div>
+        <div>
+          <div style="font-weight:600;margin-bottom:2px">Trigger your first sync</div>
+          <div style="font-size:0.8rem;color:var(--text-dim);line-height:1.5">Go to <strong style="color:var(--text)">Settings → Sync Now</strong>. The first sync takes 1–2 minutes and pulls all structures, wallet, members, and market prices from ESI.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;align-items:flex-start">
+        <div style="min-width:28px;height:28px;border-radius:50%;background:var(--accent);color:#0a0f1e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem">2</div>
+        <div>
+          <div style="font-weight:600;margin-bottom:2px">Overview tab</div>
+          <div style="font-size:0.8rem;color:var(--text-dim);line-height:1.5">Key KPIs at a glance: wallet balance, tax income, structure fuel status, corp kills, and active member count. Auto-refreshes every 60 seconds.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;align-items:flex-start">
+        <div style="min-width:28px;height:28px;border-radius:50%;background:var(--accent);color:#0a0f1e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem">3</div>
+        <div>
+          <div style="font-weight:600;margin-bottom:2px">Structures + Metenox</div>
+          <div style="font-size:0.8rem;color:var(--text-dim);line-height:1.5">Track fuel timers and gas stock per structure. Metenox shows live profitability using Jita p99 prices. Use the ✏ button to rename locations shown as raw IDs.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;align-items:flex-start">
+        <div style="min-width:28px;height:28px;border-radius:50%;background:var(--accent);color:#0a0f1e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem">4</div>
+        <div>
+          <div style="font-weight:600;margin-bottom:2px">Alt → Main mappings</div>
+          <div style="font-size:0.8rem;color:var(--text-dim);line-height:1.5">Go to <strong style="color:var(--text)">Settings → Alt → Main Mappings</strong> and import a CSV (format: AltName,MainName). All leaderboards — tax, mining, kills — then aggregate by main character.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;align-items:flex-start">
+        <div style="min-width:28px;height:28px;border-radius:50%;background:var(--accent);color:#0a0f1e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem">5</div>
+        <div>
+          <div style="font-weight:600;margin-bottom:2px">Notifications</div>
+          <div style="font-size:0.8rem;color:var(--text-dim);line-height:1.5">Set up a Discord webhook or SMTP email in <strong style="color:var(--text)">Settings → Notifications</strong> to get alerted when fuel or gas runs low. Alerts fire after every sync.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;align-items:flex-start">
+        <div style="min-width:28px;height:28px;border-radius:50%;background:var(--accent);color:#0a0f1e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem">6</div>
+        <div>
+          <div style="font-weight:600;margin-bottom:2px">Customise visible tabs</div>
+          <div style="font-size:0.8rem;color:var(--text-dim);line-height:1.5">In <strong style="color:var(--text)">Settings → Visible Tabs</strong> you can hide tabs your corp doesn't use to keep the nav clean.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end">
+      <button class="btn btn-primary" id="btn-tutorial-close">Got it, let's go!</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Logout Choice Modal ────────────────────────────────────────────── -->
 <div id="logout-modal" style="display:none;position:fixed;inset:0;background:rgba(4,8,16,.85);
   align-items:center;justify-content:center;z-index:9999">
@@ -759,6 +930,7 @@
 <script src="/js/wallet.js"></script>
 <script src="/js/inventory.js"></script>
 <script src="/js/kills.js"></script>
+<script src="/js/contracts.js"></script>
 <script src="/js/health.js"></script>
 <script src="/js/settings.js"></script>
 <script src="/js/app.js"></script>

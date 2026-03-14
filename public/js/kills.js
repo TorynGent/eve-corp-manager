@@ -39,33 +39,13 @@ async function loadKills() {
           </div>
         </div>`).join('');
 
-      // Kills count chart (not ISK — use theme colors for color-blind mode)
-      const theme = getThemeColors();
-      destroyChart('chart-kills');
-      charts['chart-kills'] = new Chart(document.getElementById('chart-kills'), {
-        type: 'bar',
-        data: {
-          labels:   data.top10.map(k => k.mainName),
-          datasets: [{
-            label:           'Kills',
-            data:            data.top10.map(k => k.kills),
-            backgroundColor: themeColorWithAlpha(theme.red, 0.53),
-            borderColor:     theme.red,
-            borderWidth:     1,
-          }],
-        },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          plugins: {
-            legend: { display: false },
-            tooltip: { callbacks: { label: ctx => ` ${ctx.raw} kills` } },
-          },
-          scales: {
-            x: { grid: { color: 'rgba(30,48,79,.5)' }, ticks: { color: '#7a95b5', stepSize: 1 } },
-            y: { grid: { display: false }, ticks: { color: '#c5d5e8' } },
-          },
-        },
+      // Doughnut — kills share per pilot, ship icon on slice or leader line for small slices
+      buildPilotDoughnut({
+        canvasId:  'chart-kills',
+        legendId:  'kills-pie-legend',
+        top10:     data.top10,
+        valueKey:  'kills',
+        valueSuffix: 'kills',
       });
     }
 
@@ -160,6 +140,8 @@ async function loadKills() {
     document.getElementById('kills-top10').innerHTML =
       `<div class="alert alert-error">${err.message}</div>`;
   }
+  // Always reload losses for the same period
+  loadLosses();
 }
 
 document.getElementById('kills-period')?.addEventListener('change', loadKills);
@@ -196,20 +178,191 @@ document.querySelectorAll('.kills-period-preset').forEach(btn => {
   });
 });
 
-document.getElementById('btn-sync-kills')?.addEventListener('click', async () => {
-  const btn = document.getElementById('btn-sync-kills');
-  btn.disabled = true;
-  btn.textContent = '⟳ Syncing…';
-  try {
-    await api.post('/api/kills/sync');
-    setTimeout(() => {
-      loadKills();
-      btn.disabled = false;
-      btn.textContent = '⟳ Sync Kills';
-    }, 5000);
-  } catch (err) {
-    toast('Kills sync error: ' + err.message, 'error');
-    btn.disabled = false;
-    btn.textContent = '⟳ Sync Kills';
-  }
+document.querySelectorAll('.btn-sync-kills').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    document.querySelectorAll('.btn-sync-kills').forEach(b => { b.disabled = true; b.textContent = '⟳ Syncing…'; });
+    try {
+      await api.post('/api/kills/sync');
+      setTimeout(() => {
+        loadKills();
+        loadLosses();
+        document.querySelectorAll('.btn-sync-kills').forEach(b => { b.disabled = false; b.textContent = '⟳ Sync Kills'; });
+      }, 5000);
+    } catch (err) {
+      toast('Kills sync error: ' + err.message, 'error');
+      document.querySelectorAll('.btn-sync-kills').forEach(b => { b.disabled = false; b.textContent = '⟳ Sync Kills'; });
+    }
+  });
 });
+
+// ── Shared doughnut builder (kills + losses) ──────────────────────────────────
+const SLICE_COLORS = [
+  '#e55','#e9a','#4af','#5d5',
+  '#c084fc','#f97316','#22d3ee','#a3e635','#fb7185','#fde68a',
+];
+
+async function buildPilotDoughnut({ canvasId, legendId, top10, valueKey, valueSuffix }) {
+  const canvas = document.getElementById(canvasId);
+  const legendEl = document.getElementById(legendId);
+  if (!canvas) return;
+
+  const theme  = getThemeColors();
+  const colors = [theme.red, theme.gold, theme.blue, theme.green, ...SLICE_COLORS.slice(4)];
+
+  // Preload ship icons
+  const typeIds   = top10.map(k => k.favShipTypeId);
+  const iconCache = {};
+  await Promise.all(typeIds.map(tid => {
+    if (!tid) return Promise.resolve();
+    return new Promise(resolve => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload  = () => { iconCache[tid] = img; resolve(); };
+      img.onerror = () => resolve();
+      img.src = `https://images.evetech.net/types/${tid}/icon?size=32`;
+    });
+  }));
+
+  // Custom plugin: icon on large slices only — small slices covered by HTML legend
+  const shipIconPlugin = {
+    id: `shipIcons_${canvasId}`,
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      const meta = chart.getDatasetMeta(0);
+      meta.data.forEach((arc, i) => {
+        const tid = typeIds[i];
+        const img = tid && iconCache[tid];
+        if (!img) return;
+        const span = arc.endAngle - arc.startAngle;
+        if (span < 0.55) return; // only draw on slices wide enough to fit an icon
+        const mid  = (arc.startAngle + arc.endAngle) / 2;
+        const r    = (arc.innerRadius + arc.outerRadius) / 2;
+        const x    = arc.x + Math.cos(mid) * r;
+        const y    = arc.y + Math.sin(mid) * r;
+        const size = Math.min(28, r * span * 0.45);
+        if (size < 12) return;
+        ctx.save();
+        ctx.globalAlpha = 0.9;
+        ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
+        ctx.restore();
+      });
+    },
+  };
+
+  destroyChart(canvasId);
+  charts[canvasId] = new Chart(canvas, {
+    type: 'doughnut',
+    plugins: [shipIconPlugin],
+    data: {
+      labels:   top10.map(k => k.mainName),
+      datasets: [{
+        data:            top10.map(k => k[valueKey]),
+        backgroundColor: top10.map((_, i) => themeColorWithAlpha(colors[i % colors.length], 0.72)),
+        borderColor:     top10.map((_, i) => colors[i % colors.length]),
+        borderWidth:     2,
+        hoverOffset:     8,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 1,
+      cutout: '42%',
+      layout: { padding: 4 },
+      plugins: {
+        legend: { display: false }, // replaced by custom HTML legend below
+        tooltip: {
+          callbacks: {
+            title: ctx => ctx[0].label,
+            label: ctx => {
+              const k = top10[ctx.dataIndex];
+              const lines = [`  ${ctx.raw} ${valueSuffix}`, `  ${fmtISK(k.totalValue)} ISK`];
+              if (k.favShipName) lines.push(`  Fav ship: ${k.favShipName}`);
+              return lines;
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // Render custom HTML legend with ship icons + colour swatch + name + count
+  if (legendEl) {
+    legendEl.innerHTML = top10.map((k, i) => {
+      const color = colors[i % colors.length];
+      const tid   = k.favShipTypeId;
+      const iconHtml = tid
+        ? `<img src="https://images.evetech.net/types/${tid}/icon?size=32"
+             style="width:20px;height:20px;object-fit:contain;flex-shrink:0"
+             title="${esc(k.favShipName || 'Unknown ship')}">`
+        : `<span style="width:20px;height:20px;display:inline-block;flex-shrink:0"></span>`;
+      return `
+        <div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)">
+          <span style="width:10px;height:10px;border-radius:2px;background:${color};flex-shrink:0"></span>
+          ${iconHtml}
+          <span style="font-size:0.78rem;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(k.mainName)}</span>
+          <span style="font-size:0.72rem;color:var(--text-dim);white-space:nowrap">${k[valueKey]}</span>
+        </div>`;
+    }).join('');
+  }
+}
+
+// ── Corp Losses ───────────────────────────────────────────────────────────────
+async function loadLosses() {
+  try {
+    const period = document.getElementById('kills-period')?.value || 'rolling30';
+    const data   = await api.get(`/api/kills/losses?period=${period}`);
+
+    // Top 10 losses
+    const top10El = document.getElementById('losses-top10');
+    if (!data.top10 || data.top10.length === 0) {
+      top10El.innerHTML = '<p class="empty">No loss data for this period.</p>';
+      destroyChart('chart-losses');
+      document.getElementById('losses-pie-legend').innerHTML = '';
+    } else {
+      const maxL = data.top10[0]?.losses || 1;
+      const medals = ['🥇', '🥈', '🥉'];
+      top10El.innerHTML = data.top10.map((k, i) => `
+        <div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span>${medals[i] || (i + 1) + '.'} <strong>${esc(k.mainName)}</strong></span>
+            <span style="color:var(--red)">${k.losses} losses &nbsp;·&nbsp; ${fmtISK(k.totalValue)} ISK</span>
+          </div>
+          <div class="bar-outer">
+            <div class="bar-fill bar-red" style="width:${(k.losses / maxL * 100).toFixed(1)}%;opacity:0.55"></div>
+          </div>
+        </div>`).join('');
+
+      buildPilotDoughnut({
+        canvasId:    'chart-losses',
+        legendId:    'losses-pie-legend',
+        top10:       data.top10,
+        valueKey:    'losses',
+        valueSuffix: 'losses',
+      });
+    }
+
+    const lossTotal = document.getElementById('losses-total');
+    if (lossTotal) lossTotal.textContent = data.totalLosses || 0;
+
+    // Recent losses table
+    const tbody = document.getElementById('losses-tbody');
+    if (!data.recentLosses || data.recentLosses.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">No losses for this period.</td></tr>';
+    } else {
+      tbody.innerHTML = data.recentLosses.map(l => `
+        <tr>
+          <td>${fmtDate(l.killTime)}</td>
+          <td>${esc(l.victimName || '—')}</td>
+          <td>${esc(l.shipName || '—')}</td>
+          <td>${esc(l.systemName || '—')}</td>
+          <td class="text-right" style="color:var(--red)">${fmtISK(l.totalValue)}</td>
+          <td><a href="https://zkillboard.com/kill/${l.killId}/" target="_blank"
+               style="color:var(--text-dim);font-size:0.72rem">zKill ↗</a></td>
+        </tr>`).join('');
+    }
+
+  } catch (err) {
+    console.error('Losses load error:', err);
+  }
+}

@@ -48,6 +48,18 @@
       if (typeof window !== 'undefined') window.__dateFormat = display.dateFormat || 'eu';
     } catch (_) {}
 
+    // Apply tab visibility
+    try {
+      const tabVis = await api.get('/api/settings/tabs');
+      applyTabVisibility(tabVis);
+    } catch (_) {}
+
+    // Show tutorial on first launch
+    try {
+      const tut = await api.get('/api/settings/tutorial-seen');
+      if (!tut.seen) showTutorialModal();
+    } catch (_) {}
+
     // Header — use real EVE corp logo image, fall back to initials if it fails
     document.getElementById('hdr-corp').textContent = me.corporationName || 'Your Corporation';
     document.getElementById('hdr-char').textContent = `Logged in as ${me.characterName}`;
@@ -76,6 +88,33 @@
   }
 })();
 
+// ── Tab Visibility ─────────────────────────────────────────────────────────────
+const CONFIGURABLE_TABS = ['structures', 'metenox', 'wallet', 'kills', 'contracts', 'health'];
+
+function applyTabVisibility(vis) {
+  CONFIGURABLE_TABS.forEach(t => {
+    const btn   = document.querySelector(`.nav-tab[data-tab="${t}"]`);
+    const panel = document.getElementById(`tab-${t}`);
+    const hide  = vis[t] === false;
+    if (btn)   btn.style.display   = hide ? 'none' : '';
+    // If the currently active tab is being hidden, redirect to overview
+    if (hide && panel && panel.classList.contains('active')) {
+      document.querySelector('.nav-tab[data-tab="overview"]').click();
+    }
+  });
+}
+
+// ── Tutorial Modal ─────────────────────────────────────────────────────────────
+function showTutorialModal() {
+  const modal = document.getElementById('tutorial-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+document.getElementById('btn-tutorial-close').addEventListener('click', async () => {
+  document.getElementById('tutorial-modal').style.display = 'none';
+  try { await api.post('/api/settings/tutorial-seen'); } catch (_) {}
+});
+
 // ── Tab Navigation ────────────────────────────────────────────────────────────
 let loadedTabs = new Set();
 
@@ -97,7 +136,7 @@ document.addEventListener('keydown', (e) => {
   const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable);
   if (isInput) return;
   if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-  const tabs = [...document.querySelectorAll('.nav-tab')];
+  const tabs = [...document.querySelectorAll('.nav-tab')].filter(t => t.style.display !== 'none');
   if (!tabs.length) return;
   const idx = tabs.findIndex(t => t.classList.contains('active'));
   let next = e.key === 'ArrowLeft' ? (idx <= 0 ? tabs.length - 1 : idx - 1) : (idx >= tabs.length - 1 ? 0 : idx + 1);
@@ -112,23 +151,25 @@ function loadTabContent(name) {
     case 'metenox':    loadMetenox();     break;
     case 'wallet':     loadWallet();      break;
     case 'mining':     loadMining();      break;
-    case 'kills':      loadKills();       break;
-    case 'health':     loadHealth();      break;
-    case 'settings':   loadSettings();    break;
+    case 'kills':      loadKills();             break;
+    case 'contracts':  loadContracts();          break;
+    case 'health':     loadHealth();             break;
+    case 'settings':   loadSettings();           break;
   }
 }
 
 function refreshTab(name) {
   if (!loadedTabs.has(name)) return;
   switch (name) {
-    case 'overview':   loadDashboard();   break;
-    case 'structures': loadStructures();  break;
-    case 'metenox':    loadMetenox();     break;
+    case 'overview':   loadDashboard();          break;
+    case 'structures': loadStructures();         break;
+    case 'metenox':    loadMetenox();            break;
     case 'wallet':     loadTaxCharts(); loadWalletHistory(); break;
-    case 'mining':     loadMining();      break;
-    case 'kills':      loadKills();       break;
-    case 'health':     loadHealth();      break;
-    case 'settings':   loadSyncStatus();  break;
+    case 'mining':     loadMining();             break;
+    case 'kills':      loadKills();              break;
+    case 'contracts':  loadContracts();          break;
+    case 'health':     loadHealth();             break;
+    case 'settings':   loadSyncStatus();         break;
   }
 }
 

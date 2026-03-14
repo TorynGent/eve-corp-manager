@@ -82,13 +82,12 @@ function makeBarChart(id, labels, datasets, opts = {}) {
 }
 
 /**
- * makeFlowChart — grouped bar (income/expenses, left axis) + line overlay (net, right axis).
- * Used for the Monthly Corp Flow chart on the Wallet tab.
+ * makeFlowChart — grouped bars (income/expenses) + net line on a single shared axis.
+ * Bars sit above zero, net line dips below — one zero reference line for everything.
  */
 function makeFlowChart(id, labels, income, expenses, net) {
   destroyChart(id);
   const c = getThemeColors();
-  // Compact billion/million formatter for axis ticks
   const fmtB = v => {
     const abs = Math.abs(v);
     if (abs >= 1e9) return (v / 1e9).toFixed(2) + 'B';
@@ -109,7 +108,6 @@ function makeFlowChart(id, labels, income, expenses, net) {
           maxBarThickness: 60,
           barPercentage: 1.0,
           categoryPercentage: 0.8,
-          yAxisID: 'y',
           order: 2,
         },
         {
@@ -121,7 +119,6 @@ function makeFlowChart(id, labels, income, expenses, net) {
           maxBarThickness: 60,
           barPercentage: 1.0,
           categoryPercentage: 0.8,
-          yAxisID: 'y',
           order: 2,
         },
         {
@@ -134,7 +131,6 @@ function makeFlowChart(id, labels, income, expenses, net) {
           pointRadius: 3,
           pointHoverRadius: 5,
           tension: 0.25,
-          yAxisID: 'y1',
           order: 1,
         },
       ],
@@ -148,21 +144,14 @@ function makeFlowChart(id, labels, income, expenses, net) {
       },
       scales: {
         x: { grid: { color: 'rgba(30,48,79,.5)' }, ticks: { color: '#7a95b5' } },
-        // Left axis — income & expenses bars
         y: {
-          position: 'left',
-          grid: { color: 'rgba(30,48,79,.5)' },
-          ticks: { color: '#7a95b5', callback: v => fmtB(v) },
-        },
-        // Right axis — net line; only the zero baseline drawn on chart area
-        y1: {
-          position: 'right',
           grid: {
-            drawOnChartArea: true,
-            color: ctx => ctx.tick.value === 0 ? 'rgba(190,210,240,0.45)' : 'transparent',
-            lineWidth: ctx => ctx.tick.value === 0 ? 2 : 0,
+            color: ctx => ctx.tick.value === 0
+              ? 'rgba(190,210,240,0.55)'
+              : 'rgba(30,48,79,.5)',
+            lineWidth: ctx => ctx.tick.value === 0 ? 2 : 1,
           },
-          ticks: { color: c.blue, callback: v => fmtB(v) },
+          ticks: { color: '#7a95b5', callback: v => fmtB(v) },
         },
       },
     },

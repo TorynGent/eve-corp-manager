@@ -57,8 +57,9 @@ router.get('/notifications', requireAuth, (req, res) => {
     recipients:       getSetting('recipients', ''),
     fuelThresholdDays: getSetting('fuel_threshold_days', '14'),
     gasThresholdDays:  getSetting('gas_threshold_days', '7'),
-    enabled:           getSetting('notifications_enabled', 'true'),
-    discordWebhookUrl: getSetting('discord_webhook_url', ''),
+    enabled:                       getSetting('notifications_enabled', 'true'),
+    contractNotificationsEnabled:  getSetting('contract_notifications_enabled', 'true'),
+    discordWebhookUrl:             getSetting('discord_webhook_url', ''),
   });
 });
 
@@ -73,8 +74,9 @@ router.put('/notifications', requireAuth, (req, res) => {
     'recipients':           req.body.recipients,
     'fuel_threshold_days':  req.body.fuelThresholdDays,
     'gas_threshold_days':   req.body.gasThresholdDays,
-    'notifications_enabled': req.body.enabled,
-    'discord_webhook_url':  req.body.discordWebhookUrl,
+    'notifications_enabled':            req.body.enabled,
+    'contract_notifications_enabled':   req.body.contractNotificationsEnabled,
+    'discord_webhook_url':              req.body.discordWebhookUrl,
   };
   if (req.body.smtpPass) fields['smtp_pass'] = encryptValue(req.body.smtpPass);
 
@@ -213,6 +215,42 @@ router.post('/sync-now', requireAuth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
+});
+
+// ── Tutorial ───────────────────────────────────────────────────────────────────
+
+// GET /api/settings/tutorial-seen
+router.get('/tutorial-seen', requireAuth, (req, res) => {
+  res.json({ seen: getSetting('tutorial_seen', 'false') === 'true' });
+});
+
+// POST /api/settings/tutorial-seen
+router.post('/tutorial-seen', requireAuth, (req, res) => {
+  setSetting('tutorial_seen', 'true');
+  res.json({ ok: true });
+});
+
+// ── Tab Visibility ──────────────────────────────────────────────────────────────
+
+const CONFIGURABLE_TABS = ['structures', 'metenox', 'wallet', 'kills', 'contracts', 'health'];
+
+// GET /api/settings/tabs
+router.get('/tabs', requireAuth, (req, res) => {
+  const vis = {};
+  for (const t of CONFIGURABLE_TABS) {
+    vis[t] = getSetting(`tab_visible_${t}`, 'true') !== 'false';
+  }
+  res.json(vis);
+});
+
+// PUT /api/settings/tabs
+router.put('/tabs', requireAuth, (req, res) => {
+  for (const t of CONFIGURABLE_TABS) {
+    if (req.body[t] !== undefined) {
+      setSetting(`tab_visible_${t}`, req.body[t] ? 'true' : 'false');
+    }
+  }
+  res.json({ ok: true });
 });
 
 // ── CEO Scratchpad ─────────────────────────────────────────────────────────────

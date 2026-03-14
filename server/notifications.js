@@ -127,6 +127,96 @@ async function sendAlertDigest(alerts) {
   }
 }
 
+function fmtISK(v) {
+  const abs = Math.abs(v);
+  if (abs >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+  if (abs >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+  if (abs >= 1e3) return (v / 1e3).toFixed(0) + 'K';
+  return v.toFixed(0);
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/** Send notification for new corp contracts assigned to the corp */
+async function sendContractAlerts(contracts) {
+  if (!contracts.length) return;
+  const enabled = getSetting('contract_notifications_enabled', 'true');
+  if (enabled !== 'true') return;
+
+  const recipients = getRecipients();
+  const discordUrl = getDiscordWebhookUrl();
+  if (!recipients.length && !discordUrl) return;
+
+  if (recipients.length) {
+    const transport = buildTransport();
+    const from = getSetting('smtp_from', 'EVE Corp Dashboard <noreply@example.com>');
+
+    const typeLabel = t => t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const valueLabel = c => c.price > 0
+      ? `${fmtISK(c.price)} ISK`
+      : c.reward > 0
+        ? `${fmtISK(c.reward)} ISK reward`
+        : '—';
+
+    const rows = contracts.map(c => `
+    <tr>
+      <td style="padding:8px;border-bottom:1px solid #1e304f">${esc(typeLabel(c.type))}</td>
+      <td style="padding:8px;border-bottom:1px solid #1e304f">${esc(c.title)}</td>
+      <td style="padding:8px;border-bottom:1px solid #1e304f">${esc(c.issuerName)}</td>
+      <td style="padding:8px;border-bottom:1px solid #1e304f;color:#f0c040;font-weight:bold">${valueLabel(c)}</td>
+      <td style="padding:8px;border-bottom:1px solid #1e304f">${c.dateExpired ? new Date(c.dateExpired).toDateString() : '—'}</td>
+    </tr>`).join('');
+
+    const html = `
+    <div style="background:#07090f;color:#c5d5e8;font-family:sans-serif;padding:24px;max-width:700px">
+      <h2 style="color:#4a9eff;margin-bottom:4px">📋 New Corp Contract${contracts.length > 1 ? 's' : ''}</h2>
+      <p style="color:#7a95b5;margin-bottom:20px">${contracts.length} contract${contracts.length > 1 ? 's' : ''} assigned to your corporation:</p>
+      <table style="width:100%;border-collapse:collapse;background:#0d1526;border:1px solid #1e304f">
+        <thead>
+          <tr style="background:#111d35">
+            <th style="padding:10px;text-align:left;color:#7a95b5;font-size:11px;text-transform:uppercase">Type</th>
+            <th style="padding:10px;text-align:left;color:#7a95b5;font-size:11px;text-transform:uppercase">Title</th>
+            <th style="padding:10px;text-align:left;color:#7a95b5;font-size:11px;text-transform:uppercase">From</th>
+            <th style="padding:10px;text-align:left;color:#7a95b5;font-size:11px;text-transform:uppercase">Value</th>
+            <th style="padding:10px;text-align:left;color:#7a95b5;font-size:11px;text-transform:uppercase">Expires</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p style="color:#7a95b5;font-size:12px;margin-top:20px">
+        Sent by EVE Corp Dashboard at ${new Date().toUTCString()}
+      </p>
+    </div>`;
+
+    await transport.sendMail({
+      from,
+      to: recipients.join(', '),
+      subject: `📋 EVE Corp — ${contracts.length} new contract${contracts.length > 1 ? 's' : ''} assigned to corp`,
+      html,
+    });
+  }
+
+  if (discordUrl) {
+    try {
+      const axios = require('axios');
+      const typeLabel = t => t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      const valueLabel = c => c.price > 0
+        ? `${fmtISK(c.price)} ISK`
+        : c.reward > 0 ? `${fmtISK(c.reward)} ISK reward` : '—';
+      const lines = contracts.map(c =>
+        `• **${typeLabel(c.type)}** — "${c.title}" from **${c.issuerName}** — ${valueLabel(c)}`
+      ).join('\n');
+      await axios.post(discordUrl, {
+        content: `@here 📋 **EVE Corp — New Contract${contracts.length > 1 ? 's' : ''}** assigned to corp:\n\n${lines}`,
+      }, { headers: { 'Content-Type': 'application/json' }, timeout: 10000 });
+    } catch (discordErr) {
+      console.error('[Notifications] Contract Discord error:', discordErr.message);
+    }
+  }
+}
+
 /** Check all structures and send alerts if below thresholds */
 async function checkAndNotify() {
   const fuelThreshold = parseFloat(getSetting('fuel_threshold_days', '14'));
@@ -197,4 +287,4 @@ async function checkAndNotify() {
   }
 }
 
-module.exports = { sendTestEmail, sendTestDiscord, sendAlertDigest, checkAndNotify };
+module.exports = { sendTestEmail, sendTestDiscord, sendAlertDigest, checkAndNotify, sendContractAlerts };

@@ -197,8 +197,8 @@ async function resolveNames(ids) {
 /** Resolve a single structure name (requires auth) */
 async function resolveStructureName(structureId, characterId) {
   const cached = getCachedName(structureId);
-  // cached.name === '' means a previous attempt got 401/403 — skip retrying
-  if (cached) return cached.name;
+  // Only skip if we have a real name — empty string ('failed') always gets retried
+  if (cached && cached.name) return cached.name;
   try {
     const data = await esiGet(`/universe/structures/${structureId}/`, { characterId });
     if (data?.name) { cacheName(structureId, data.name, 'structure'); return data.name; }
